@@ -96,7 +96,7 @@ B_d5 = np.zeros((5, 1))
 C_d5 = np.eye(5)
 D_d5 = np.zeros((5, 1))
 
-sys_d5 = Bench(A_d5, B_d5, C_d5, D_d5)
+sys_d5 = Bench(A_d5, B_d5, C_d5, D_d5, 0.1)
 
 sys_variables = {
     'RC': sys_rc,
