@@ -2,14 +2,14 @@ import numpy as np
 import control as ctrl
 
 class Bench:
-    def __init__(self, A, B, C=None, D=None, Ts=0.02) -> None:
-        self.A = A
-        self.B = B
+    def __init__(self, A, B=None, C=None, D=None, Ts=0.02) -> None:
         self.nx = A.shape[1]
+        B = B if B is not None else np.zeros((self.nx, 1))
         self.nu = B.shape[1]
-        self.C = C if C is not None else np.eye(1, self.nx)
-        self.D = D if D is not None else 0
-        self.sysc = ctrl.StateSpace(self.A, self.B, self.C, self.D)
+        self.Ts = Ts
+        C = C if C is not None else np.ones((1, self.nx))
+        D = D if D is not None else np.zeros((C.shape[0], self.nu))
+        self.sysc = ctrl.StateSpace(A, B, C, D)
         self.sysd = ctrl.c2d(self.sysc, Ts) if Ts else None
 
 # Resistor-capacitor network
@@ -92,11 +92,8 @@ P = np.array([[0.6, -0.1, 0.1, 0.7, -0.2],
               [0.8, 0.7, 0.6, -0.3, 0.2]])
 
 A_d5 = P @ D @ np.linalg.inv(P)
-B_d5 = np.zeros((5, 1))
-C_d5 = np.eye(5)
-D_d5 = np.zeros((5, 1))
 
-sys_d5 = Bench(A_d5, B_d5, C_d5, D_d5, 0.1)
+sys_d5 = Bench(A_d5, Ts=0.1)
 
 sys_variables = {
     'RC': sys_rc,
