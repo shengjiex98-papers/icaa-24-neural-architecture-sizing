@@ -91,8 +91,10 @@ $$
 ## Additive noise model
 In the additive noise model, the noise $w$ is not dependent on the current state $x[t]$. *i.e.*, $\hat{x}_i[t] = x_i[t] + w_i$.
 $$
-x[t+1] = Ax[t] + BK(x[t]+w) \\
-    = (A+BK)x[t] + BKw
+\begin{align*}
+x[t+1] &= Ax[t] + BK(x[t]+w) \\
+    &= (A+BK)x[t] + BKw
+\end{align*}
 $$
 
 Since
