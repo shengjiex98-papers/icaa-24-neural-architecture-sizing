@@ -4,7 +4,7 @@ import control as ctrl
 class Bench:
     def __init__(self, A, B=None, C=None, D=None, Ts=0.02) -> None:
         self.nx = A.shape[1]
-        B = B if B is not None else np.zeros((self.nx, 1))
+        B = B if B is not None else np.ones((self.nx, 1))
         self.nu = B.shape[1]
         self.Ts = Ts
         C = C if C is not None else np.ones((1, self.nx))
