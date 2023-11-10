@@ -1,5 +1,5 @@
 ### A Pluto.jl notebook ###
-# v0.19.28
+# v0.19.32
 
 using Markdown
 using InteractiveUtils
@@ -26,6 +26,32 @@ begin
 	using JLD2
 	using PlotlyJS
 	plotlyjs()
+end
+
+# ╔═╡ c82e1d58-759d-4208-8be0-bef20ee6abb4
+begin
+	# For heuristic 3
+	using JuMP
+	using HiGHS
+	
+	heuristic3(sensitivity::Vector{<:Real}, budget::Real, tradeoff_map::Matrix{<:Real}) = let 
+	    cost(level) = tradeoff_map[level, 3]
+	
+	    nlevels = size(tradeoff_map, 1)
+	    nstates = size(sensitivity, 1)
+	
+	    model = Model(HiGHS.Optimizer)
+	    @variable(model, a[1:nstates,1:nlevels] >= 0, Int)
+	    @objective(model, Min, sum(a * tradeoff_map[:,2] .* sensitivity))
+	    @constraint(model, sum(a * tradeoff_map[:,3]) <= budget)
+	    for i in 1:nstates
+	        @constraint(model, sum(a[i,:]) == 1)
+	    end
+	    set_silent(model)
+	    optimize!(model)
+	    map(argmax, [value.(a)[i,:] for i in axes(value.(a),1)])
+	end
+	
 end
 
 # ╔═╡ 02e741a7-8610-4000-9296-ce60f773f17f
@@ -243,19 +269,23 @@ perm_mat = I(5)[sortperm(dets, by=i -> -i),:]
 
 # ╔═╡ ee661a94-05a5-4023-b16d-4e78b90ec8a8
 heur2 = let
-	W = Zonotope(zeros(axes(Φ, 1)), diagm(efficient_net_map_full[[1, 1, 1, 1, 1], 2]))
+	tradeoffmap = efficient_net_map
+	W = Zonotope(zeros(axes(Φ, 1)), diagm(tradeoffmap[[1, 1, 1, 1, 1], 2]))
 	r = reach(Φ, x0, W, 100)
+	reach_counter = 1
 	md = maximum([diameter(x.X) for x in r])
-	heur = [(1, 1, 1, 1, 1); md; sum(efficient_net_map_full[[1, 1, 1, 1, 1], 3])]
-	for row in eachrow(repeat(perm_mat, size(efficient_net_map_full, 1) - 1, 1))
-		@info row heur[1, end]
+	heur = [(1, 1, 1, 1, 1); md; sum(tradeoffmap[[1, 1, 1, 1, 1], 3])]
+	for row in eachrow(repeat(perm_mat, size(tradeoffmap, 1) - 1, 1))
+		# @info row heur[1, end]
 		indices = row .+ collect(heur[1,end])
-		@info indices
-		W = Zonotope(zeros(axes(Φ, 1)), diagm(efficient_net_map_full[indices, 2]))
+		# @info indices
+		W = Zonotope(zeros(axes(Φ, 1)), diagm(tradeoffmap[indices, 2]))
 		r = reach(Φ, x0, W, 100)
+		reach_counter += 1
 		md = maximum([diameter(x.X) for x in r])
-		heur = hcat(heur, [tuple(indices...); md; sum(efficient_net_map_full[indices, 3])])
+		heur = hcat(heur, [tuple(indices...); md; sum(tradeoffmap[indices, 3])])
 	end
+	@info reach_counter
 	heur
 end
 
@@ -267,26 +297,32 @@ In this section, we develop a heuristic for extracting a near-optimial set of so
 """
 
 # ╔═╡ 27e7da0c-500a-432a-a2ca-b96a4da88436
-heur = let
-	W = Zonotope(zeros(axes(Φ, 1)), diagm(efficient_net_map_full[[1, 1, 1, 1, 1], 2]))
+heur, inte = let
+	tradeoffmap = efficient_net_map
+	W = Zonotope(zeros(axes(Φ, 1)), diagm(tradeoffmap[[1, 1, 1, 1, 1], 2]))
 	r = reach(Φ, x0, W, 100)
 	md = maximum([diameter(x.X) for x in r])
-	heur = [(1, 1, 1, 1, 1); md; sum(efficient_net_map_full[[1, 1, 1, 1, 1], 3])]
+	heur = [(1, 1, 1, 1, 1); md; sum(tradeoffmap[[1, 1, 1, 1, 1], 3])]
+	inte = heur
 	lastround = heur
 	tried = Set([(1, 1, 1, 1, 1)])
-	for round in length(heur[1,1])+1:(size(efficient_net_map_full, 1) * length(heur[1,1]))
+
+	# Record # of calls to reachability function
+	reach_counter = 1
+	
+	for round in length(heur[1,1])+1:(size(tradeoffmap, 1) * length(heur[1,1]))
 		# Expand solution space
 		thisround = [(0, 0, 0, 0, 0); Inf; Inf]
-		@info "Solutions from the last round" lastround
+		# @info "Solutions from the last round" lastround
 		# For each solution we found last round
 		for h in eachcol(lastround)
 			# Try incrementing the NN index for each NN
 			for place in eachindex(h[1])
 				inc = collect(h[1]) + [zeros(Int64, place - 1); 1; zeros(Int64, 	length(h[1]) - place)]
 				for i in eachindex(inc)
-					inc[i] = clamp(inc[i], axes(efficient_net_map_full, 1))
+					inc[i] = clamp(inc[i], axes(tradeoffmap, 1))
 				end
-				@info "Incremented NN indices to" inc
+				# @info "Incremented NN indices to" inc
 
 				inct = tuple(inc...)
 				if inct ∈ tried
@@ -296,18 +332,20 @@ heur = let
 					# Don't allow too much difference in indices.  Speeds up the
 					# heuristic by removing interior points, but also removes some
 					# Pareto-optimal solutions.
-					if maximum(abs.(inc' .- inc)) > 1
-						continue
-					end
+					# if maximum(abs.(inc' .- inc)) > 1
+					# 	continue
+					# end
 				end
-				W = Zonotope(zeros(axes(Φ, 1)), diagm(efficient_net_map_full[inc, 2]))
+				W = Zonotope(zeros(axes(Φ, 1)), diagm(tradeoffmap[inc, 2]))
 				r = reach(Φ, x0, W, 100)
+				reach_counter += 1
 				md = maximum([diameter(x.X) for x in r])
-				thisround = hcat(thisround, [inct; md; sum(efficient_net_map_full[inc, 3])])
+				thisround = hcat(thisround, [inct; md; sum(tradeoffmap[inc, 3])])
 			end
 		end
 		# Prune dominated solutions
 		thisroundopt = [(0, 0, 0, 0, 0); Inf; Inf]
+		thisroundint = [(0, 0, 0, 0, 0); Inf; Inf]
 		for p in eachcol(thisround[:,begin+1:end])
 			add = true
 			for q in Iterators.flatten((eachcol(heur), eachcol(thisround[:,begin+1:end])))
@@ -317,12 +355,71 @@ heur = let
 			end
 			if add
 				thisroundopt = hcat(thisroundopt, reshape(collect(p), 3, 1))
+			else
+				thisroundint = hcat(thisroundint, reshape(collect(p), 3, 1))
 			end
 		end
 		heur = hcat(heur, thisroundopt[:,begin+1:end])
+		inte = hcat(inte, thisroundint[:,begin+1:end])
 		lastround = thisroundopt[:,begin+1:end]
 	end
-	heur
+	@info reach_counter
+	heur, inte
+end
+
+# ╔═╡ 8eb8896c-c54e-4cf6-b71d-945f21432b43
+size(inte)
+
+# ╔═╡ 271efb4d-b349-4531-b020-3a0c4106dae5
+md"""
+## Heuristic Using Sensitivity Analysis
+"""
+
+# ╔═╡ c73b8dcf-73bd-43d2-9d5f-5ea680c1e169
+all_budgets = let
+	# Enumerate all possible selections
+	all_selections = reshape(Iterators.product(fill([1,2,3,4,5],5)...) |> collect, :)
+	# Get cost (potential budget levels) for each selection
+	all_budgets = map(x -> sum(efficient_net_map[collect(x),3]), all_selections)
+	# Remove duplicate and sort
+	Set(all_budgets) |> collect |> sort
+end
+
+# ╔═╡ 05faadb9-28a7-48aa-b9b2-90d1010b6092
+heur3 = let
+	uniform_budgets = 2:0.5:21
+	@info length(uniform_budgets)
+	mul_sensitivity = [0.45, 0.29, 0.48, 0.68, 0.27]
+	val = map(uniform_budgets) do budget
+	    selection = heuristic3(mul_sensitivity, budget, efficient_net_map)
+	end
+	
+	points = map(val) do selection
+		W = Zonotope(zeros(axes(Φ, 1)), diagm(efficient_net_map[selection, 2]))
+		r = reach(Φ, x0, W, 100)
+		[maximum([diameter(x.X) for x in r]), sum(efficient_net_map[selection,3]), ]
+	end
+	hcat(points...)
+end
+
+# ╔═╡ fa71efe9-ccfa-4075-85b5-c7e5297f99a0
+size(optimal)
+
+# ╔═╡ 843cb555-5ac2-4956-9245-65b6cdcdb847
+begin
+	plt_es = Plots.scatter(
+		points[2,:], points[3,:], label="Exhaustive Search", 
+		xlabel="Diameter", ylabel="Cost",
+		xlabelfontsize=15,
+		ylabelfontsize=15,
+		xtickfontsize=12,
+		ytickfontsize=12,
+		legendfontsize=12,
+		# color=RGB(0.90,0.97,1), markerstrokecolor=RGB(0.9,0.9,0.9)
+	)
+	scatter!(plt_es, optimal[2,:], optimal[3,:], label="Optimal solutions", shape=:diamond)
+	Plots.savefig(plt_es, "../images/es.pdf")
+	plt_es
 end
 
 # ╔═╡ a95d593c-3da8-4f09-9b99-a3d6020772dd
@@ -332,9 +429,48 @@ Plotting the optimal solutions, we can see that almost the entire Pareto front f
 
 # ╔═╡ 60e5b3a5-7aac-4eee-8366-a45b9bfb8210
 begin
-	Plots.scatter(optimal[2,:], optimal[3,:], label="Exhaustive search", xlabel="Diameter", ylabel="Cost", hover=string.(optimal[1,:]))
-	Plots.scatter!(heur[2,:], heur[3,:], shape=:x, label="Heuristic", xlabel="Diameter", ylabel="Cost", hover=string.(heur[1,:]))
-	Plots.scatter!(heur2[2,:], heur2[3,:], shape=:x, label="Heuristic 2", xlabel="Diameter", ylabel="Cost", hover=string.(heur2[1,:]))
+	plt_dp = Plots.scatter(points[2,:], points[3,:], label="Exhaustive Search", xlabel="Diameter", ylabel="Cost", 
+		xlabelfontsize=15,
+		ylabelfontsize=15,
+		xtickfontsize=12,
+		ytickfontsize=12,
+		legendfontsize=12,
+		color=RGB(0.90,0.97,1), markerstrokecolor=RGB(0.9,0.9,0.9))
+	# plt = Plots.scatter(optimal[2,:], optimal[3,:], label="Optimal solutions", xlabel="Diameter", ylabel="Cost", hover=string.(optimal[1,:]))
+	Plots.scatter!(inte[2,:], inte[3,:], shape=:diamond, label="Dynamic Programming (pruned)", color=3)
+	Plots.scatter!(heur[2,:], heur[3,:], shape=:diamond, label="Dynamic Programming", color=2)
+	Plots.savefig(plt_dp, "../images/dp.pdf")
+	plt_dp
+end
+
+# ╔═╡ 53c3f6d9-4cfa-407a-8a17-50320eb97290
+begin
+	plt_fi = Plots.scatter(points[2,:], points[3,:], label="Exhaustive Search", xlabel="Diameter", ylabel="Cost", 
+		xlabelfontsize=15,
+		ylabelfontsize=15,
+		xtickfontsize=12,
+		ytickfontsize=12,
+		legendfontsize=12,
+		color=RGB(0.90,0.97,1), markerstrokecolor=RGB(0.9,0.9,0.9))
+	# plt = Plots.scatter(optimal[2,:], optimal[3,:], label="Optimal solutions", xlabel="Diameter", ylabel="Cost", hover=string.(optimal[1,:]))
+	Plots.scatter!(heur2[2,:], heur2[3,:], shape=:diamond, label="Fast Iterative")
+	Plots.savefig(plt_fi, "../images/fi.pdf")
+	plt_fi
+end
+
+# ╔═╡ bdc43369-da5f-4950-b0df-a8c49814eaba
+begin
+	plt_sv = Plots.scatter(points[2,:], points[3,:], label="Exhaustive Search", xlabel="Diameter", ylabel="Cost", 
+		xlabelfontsize=15,
+		ylabelfontsize=15,
+		xtickfontsize=12,
+		ytickfontsize=12,
+		legendfontsize=12,
+		color=RGB(0.90,0.97,1), markerstrokecolor=RGB(0.9,0.9,0.9))
+	# plt = Plots.scatter(optimal[2,:], optimal[3,:], label="Optimal solutions", xlabel="Diameter", ylabel="Cost", hover=string.(optimal[1,:]))
+	Plots.scatter!(heur3[1,:], heur3[2,:], shape=:diamond, label="Sensitivity Analysis")
+	Plots.savefig(plt_sv, "../images/sv.pdf")
+	plt_sv
 end
 
 # ╔═╡ 57f35365-759f-40a0-8a22-b8e9299c95db
@@ -382,7 +518,9 @@ md"""
 PLUTO_PROJECT_TOML_CONTENTS = """
 [deps]
 ControlSystemsBase = "aaaaaaaa-a6ca-5380-bf3e-84a91bcd477e"
+HiGHS = "87dc4568-4c63-4d18-b0c0-bb2238e4078b"
 JLD2 = "033835bb-8acc-5ee8-8aae-3f567f8a3819"
+JuMP = "4076af6c-e467-56ae-b986-b466b2749572"
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
 OffsetArrays = "6fe1bfb0-de20-5000-8ca7-80f57d26f881"
 PlotlyJS = "f0f68f2c-4968-5e81-91da-67840de0976a"
@@ -393,7 +531,9 @@ ReachabilityAnalysis = "1e97bd63-91d1-579d-8e8d-501d2b57c93f"
 
 [compat]
 ControlSystemsBase = "~1.9.1"
+HiGHS = "~1.7.5"
 JLD2 = "~0.4.35"
+JuMP = "~1.16.0"
 OffsetArrays = "~1.12.10"
 PlotlyJS = "~0.18.10"
 Plots = "~1.39.0"
@@ -406,9 +546,9 @@ ReachabilityAnalysis = "~0.22.1"
 PLUTO_MANIFEST_TOML_CONTENTS = """
 # This file is machine-generated - editing it directly is not advised
 
-julia_version = "1.9.2"
+julia_version = "1.9.3"
 manifest_format = "2.0"
-project_hash = "d24bef042cd9ede494339446db3665666d24a59a"
+project_hash = "a8527ed297cfa04168d0744231a7e59860b1cbf5"
 
 [[deps.ADTypes]]
 git-tree-sha1 = "5d2e21d7b0d8c22f67483ef95ebdc39c0e6b6003"
@@ -1087,6 +1227,18 @@ git-tree-sha1 = "129acf094d168394e80ee1dc4bc06ec835e510a3"
 uuid = "2e76f6c2-a576-52d4-95c1-20adfe4de566"
 version = "2.8.1+1"
 
+[[deps.HiGHS]]
+deps = ["HiGHS_jll", "MathOptInterface", "PrecompileTools", "SparseArrays"]
+git-tree-sha1 = "fce13308f09771b160232903cad57be39a8a0ebb"
+uuid = "87dc4568-4c63-4d18-b0c0-bb2238e4078b"
+version = "1.7.5"
+
+[[deps.HiGHS_jll]]
+deps = ["Artifacts", "CompilerSupportLibraries_jll", "JLLWrappers", "Libdl"]
+git-tree-sha1 = "10bf0ecdf70f643bfc1948a6af0a98be3950a3fc"
+uuid = "8fd58aa0-07eb-5a78-9b36-339c94fd15ea"
+version = "1.6.0+0"
+
 [[deps.Hiccup]]
 deps = ["MacroTools", "Test"]
 git-tree-sha1 = "6187bb2d5fcbb2007c39e7ac53308b0d371124bd"
@@ -1214,9 +1366,9 @@ version = "2.1.91+0"
 
 [[deps.JuMP]]
 deps = ["LinearAlgebra", "MacroTools", "MathOptInterface", "MutableArithmetics", "OrderedCollections", "Printf", "SnoopPrecompile", "SparseArrays"]
-git-tree-sha1 = "3700a700bc80856fe673b355123ae4574f2d5dfe"
+git-tree-sha1 = "25b2fcda4d455b6f93ac753730d741340ba4a4fe"
 uuid = "4076af6c-e467-56ae-b986-b466b2749572"
-version = "1.15.1"
+version = "1.16.0"
 
     [deps.JuMP.extensions]
     JuMPDimensionalDataExt = "DimensionalData"
@@ -2635,8 +2787,17 @@ version = "1.4.1+1"
 # ╠═ee661a94-05a5-4023-b16d-4e78b90ec8a8
 # ╟─8964836c-ca2d-4a1d-8565-6e542e20aa1b
 # ╠═27e7da0c-500a-432a-a2ca-b96a4da88436
+# ╠═8eb8896c-c54e-4cf6-b71d-945f21432b43
+# ╟─271efb4d-b349-4531-b020-3a0c4106dae5
+# ╠═c82e1d58-759d-4208-8be0-bef20ee6abb4
+# ╠═c73b8dcf-73bd-43d2-9d5f-5ea680c1e169
+# ╠═05faadb9-28a7-48aa-b9b2-90d1010b6092
+# ╠═fa71efe9-ccfa-4075-85b5-c7e5297f99a0
+# ╠═843cb555-5ac2-4956-9245-65b6cdcdb847
 # ╟─a95d593c-3da8-4f09-9b99-a3d6020772dd
 # ╠═60e5b3a5-7aac-4eee-8366-a45b9bfb8210
+# ╠═53c3f6d9-4cfa-407a-8a17-50320eb97290
+# ╠═bdc43369-da5f-4950-b0df-a8c49814eaba
 # ╟─57f35365-759f-40a0-8a22-b8e9299c95db
 # ╠═2b394eb1-c251-4cbe-a56c-e9b49de34736
 # ╟─50538ed8-bc5c-4009-a797-dea6e93c57ce
