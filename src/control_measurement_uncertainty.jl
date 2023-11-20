@@ -299,16 +299,12 @@ optimal = let
 end
 
 # ╔═╡ 3837f2d6-693f-46cb-8418-54d2a5f7e47e
-#=╠═╡
 Plots.scatter(optimal[2,:], optimal[3,:], label="Exhaustive search", xlabel="Diameter", ylabel="Cost", hover=string.(optimal[1,:]))
-  ╠═╡ =#
 
 # ╔═╡ f70a5855-c799-43f6-ae1c-888c1ef2e85c
-#=╠═╡
 for o in eachcol(optimal)
 	@info o
 end
-  ╠═╡ =#
 
 # ╔═╡ 44919be2-e2a6-485b-96ea-ac6c7eb708aa
 dets = [abs(det(Φ[begin:end .!= i, begin:end .!= i])) for i in axes(Φ, 1)]
@@ -417,9 +413,7 @@ heur, inte = let
 end
 
 # ╔═╡ 8eb8896c-c54e-4cf6-b71d-945f21432b43
-#=╠═╡
 size(inte)
-  ╠═╡ =#
 
 # ╔═╡ 271efb4d-b349-4531-b020-3a0c4106dae5
 md"""
@@ -457,33 +451,65 @@ all_budgets = let
 end
   ╠═╡ =#
 
+# ╔═╡ e95f6363-6d2f-4a88-aa30-139f7f594637
+md"""
+## Plots
+"""
+
 # ╔═╡ fa71efe9-ccfa-4075-85b5-c7e5297f99a0
-#=╠═╡
 size(optimal)
-  ╠═╡ =#
 
 # ╔═╡ 843cb555-5ac2-4956-9245-65b6cdcdb847
-#=╠═╡
 begin
-	plt_es = Plots.scatter(
-		points[2,:], points[3,:], label="Exhaustive Search", 
-		xlabel="Diameter", ylabel="Cost",
+	# plt_es = Plots.scatter(
+	# 	points[2,:], points[3,:], label="Exhaustive Search", 
+	# 	xlabel="Diameter", ylabel="Cost",
+	# 	xlabelfontsize=15,
+	# 	ylabelfontsize=15,
+	# 	xtickfontsize=12,
+	# 	ytickfontsize=12,
+	# 	legendfontsize=12,
+	# 	# color=RGB(0.90,0.97,1), markerstrokecolor=RGB(0.9,0.9,0.9)
+	# )
+	# scatter!(plt_es, optimal[2,:], optimal[3,:], 
+	# 	label="Optimal solutions", 
+	# )
+	# Plots.savefig(plt_es, "../images/es.pdf")
+	# plt_es
+
+	
+	plt_es = Plots.scatter(safepoints[2,:], safepoints[3,:], 
+		label="Exhaustive Search", 
+		xlabel="Diameter", 
+		ylabel="Cost", 
 		xlabelfontsize=15,
 		ylabelfontsize=15,
 		xtickfontsize=12,
 		ytickfontsize=12,
 		legendfontsize=12,
-		# shape=ifelse.(points[4,:], :o, :x),
+		# bottom_margin=0.1,
 		# color=RGB(0.90,0.97,1), markerstrokecolor=RGB(0.9,0.9,0.9)
 	)
-	scatter!(plt_es, optimal[2,:], optimal[3,:], 
-		label="Optimal solutions", 
-		# shape=ifelse.(optimal[4,:], :diamond, :x)
+	Plots.scatter!(unsfpoints[2,:], unsfpoints[3,:], 
+		label="Exhaustive Search (unsafe)",
+		# color=RGB(0.90,0.97,1), markerstrokecolor=RGB(0.9,0.9,0.9), 
+		shape=:x,
+		color=1
 	)
-	Plots.savefig(plt_es, "../images/es.pdf")
+
+	opsafe, opunsf = sep_points(optimal)
+	Plots.scatter!(opsafe[2,:], opsafe[3,:], 
+		label="Optimal solutions", 
+		color=2
+	)
+	Plots.scatter!(opunsf[2,:], opunsf[3,:], 
+		label="Optimal solutions (unsafe)", 
+		shape=:x,
+		color=2
+	)
+	Plots.savefig(plt_es, "../images/es-safe.pdf")
 	plt_es
 end
-  ╠═╡ =#
 
 # ╔═╡ a95d593c-3da8-4f09-9b99-a3d6020772dd
 md"""
@@ -660,7 +686,7 @@ HiGHS = "~1.7.5"
 JLD2 = "~0.4.35"
 JuMP = "~1.16.0"
 OffsetArrays = "~1.12.10"
-PlotlyJS = "~0.18.10"
+PlotlyJS = "~0.18.11"
 Plots = "~1.39.0"
 PlutoUI = "~0.7.52"
 Polyhedra = "~0.7.6"
@@ -673,7 +699,7 @@ PLUTO_MANIFEST_TOML_CONTENTS = """
 
 julia_version = "1.9.3"
 manifest_format = "2.0"
-project_hash = "a8527ed297cfa04168d0744231a7e59860b1cbf5"
+project_hash = "4a5535f62288a59737fb87470cbe5257c3f68355"
 
 [[deps.ADTypes]]
 git-tree-sha1 = "5d2e21d7b0d8c22f67483ef95ebdc39c0e6b6003"
@@ -1839,9 +1865,9 @@ version = "0.5.2"
 
 [[deps.Mustache]]
 deps = ["Printf", "Tables"]
-git-tree-sha1 = "821e918c170ead5298ff84bffee41dd28929a681"
+git-tree-sha1 = "a7cefa21a2ff993bff0456bf7521f46fc077ddf1"
 uuid = "ffc61752-8dc7-55ee-8c37-f3e9cdd09e70"
-version = "1.0.17"
+version = "1.0.19"
 
 [[deps.MutableArithmetics]]
 deps = ["LinearAlgebra", "SparseArrays", "Test"]
@@ -1884,9 +1910,9 @@ uuid = "8913a72c-1f9b-4ce2-8d82-65094dcecaec"
 version = "1.10.1"
 
 [[deps.Observables]]
-git-tree-sha1 = "6862738f9796b3edc1c09d0890afce4eca9e7e93"
+git-tree-sha1 = "7438a59546cf62428fc9d1bc94729146d37a7225"
 uuid = "510215fc-4207-5dde-b226-833fc4488ee2"
-version = "0.5.4"
+version = "0.5.5"
 
 [[deps.OffsetArrays]]
 deps = ["Adapt"]
@@ -2010,9 +2036,9 @@ version = "0.8.19"
 
 [[deps.PlotlyJS]]
 deps = ["Base64", "Blink", "DelimitedFiles", "JSExpr", "JSON", "Kaleido_jll", "Markdown", "Pkg", "PlotlyBase", "REPL", "Reexport", "Requires", "WebIO"]
-git-tree-sha1 = "7452869933cd5af22f59557390674e8679ab2338"
+git-tree-sha1 = "3db9e7724e299684bf0ca8f245c0265c4bdd8dc6"
 uuid = "f0f68f2c-4968-5e81-91da-67840de0976a"
-version = "0.18.10"
+version = "0.18.11"
 
 [[deps.Plots]]
 deps = ["Base64", "Contour", "Dates", "Downloads", "FFMPEG", "FixedPointNumbers", "GR", "JLFzf", "JSON", "LaTeXStrings", "Latexify", "LinearAlgebra", "Measures", "NaNMath", "Pkg", "PlotThemes", "PlotUtils", "PrecompileTools", "Preferences", "Printf", "REPL", "Random", "RecipesBase", "RecipesPipeline", "Reexport", "RelocatableFolders", "Requires", "Scratch", "Showoff", "SparseArrays", "Statistics", "StatsBase", "UUIDs", "UnicodeFun", "UnitfulLatexify", "Unzip"]
@@ -2919,6 +2945,7 @@ version = "1.4.1+1"
 # ╠═c82e1d58-759d-4208-8be0-bef20ee6abb4
 # ╠═05faadb9-28a7-48aa-b9b2-90d1010b6092
 # ╠═c73b8dcf-73bd-43d2-9d5f-5ea680c1e169
+# ╟─e95f6363-6d2f-4a88-aa30-139f7f594637
 # ╠═fa71efe9-ccfa-4075-85b5-c7e5297f99a0
 # ╠═843cb555-5ac2-4956-9245-65b6cdcdb847
 # ╟─a95d593c-3da8-4f09-9b99-a3d6020772dd
