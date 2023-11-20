@@ -189,7 +189,7 @@ We map the accuracy in percent to a noise bound in the range ``[0, ∞)`` by tak
 efficient_net_map_full = vcat(([100/b.acc1 - 1;; 100/b.acc5 - 1;; b.flop] for b in efficient_net_surfaces)...)
 
 # ╔═╡ 01356e5b-c44c-4098-aa2a-b009b49b9679
-n = 8
+n = 5
 
 # ╔═╡ c93415c5-f0a5-4dd1-9267-7e6443f6a08f
 efficient_net_map = efficient_net_map_full[1:n,:]
@@ -225,20 +225,45 @@ We can then view the points as a table, or as a scatter plot.
 
 # ╔═╡ 9e143da7-bd8e-4123-8ac7-bcb4a93fe797
 begin
-	points = load("../data/exhaustive_search.jld2")["points"][:,2:end]
-	points = points[:, map(x -> reduce(&, x .<= n), points[1,:])]
+	allpoints = load("../data/exhaustive_search.jld2")["points"][:,2:end]
+	points = allpoints[1:4, map(x -> reduce(&, x .<= n), allpoints[1,:])]
 	# @info 
 	# safepoints = points[1:3, BitVector(points[4,:])]
 	# unsfpoints = points[1:3, BitVector(.!points[4,:])]
 	# points = points[1:3, :]
 end
 
+# ╔═╡ 106b5ce1-053e-47c4-83f1-130274d727ed
+begin
+	diameters = zeros(8, 8, 8, 8, 8)
+	costs = zeros(8, 8, 8, 8, 8)
+	safetys = fill(false, 8, 8, 8, 8, 8)
+
+	for point in eachcol(allpoints)
+		coord = point[1]
+		diameters[coord...] = point[2]
+		costs[coord...] = point[3]
+		safetys[coord...] = point[4]
+	end
+
+	get_safety(coord) = safetys[coord...]
+	get_diameter(coord) = diameters[coord...]
+	get_costs(coord) = costs[coord...]
+	get_shape(coords, tshape, fshape) = ifelse.(get_safety.(coords), tshape, fshape)
+	sep_points(points) = let
+		safe = filter(point -> get_safety(point[1]), eachcol(points))
+		unsf = filter(point -> !get_safety(point[1]), eachcol(points))
+		return reduce(hcat, safe), reduce(hcat, unsf)
+	end
+	safepoints, unsfpoints = sep_points(points)
+end
+
 # ╔═╡ 6a7be35e-ee7b-48a8-83a0-2e1c8163170a
 begin
-	# Plots.scatter(unsfpoints[2,:], unsfpoints[3,:], label="Unsafe points", xlabel="Diameter", ylabel="Cost", hover=string.(unsfpoints[1,:]), markershape=:x, color=1)
-	# Plots.scatter!(safepoints[2,:], safepoints[3,:], label="Safe points", xlabel="Diameter", ylabel="Cost", hover=string.(safepoints[1,:]), color=1)
+	Plots.scatter(unsfpoints[2,:], unsfpoints[3,:], label="Unsafe points", xlabel="Diameter", ylabel="Cost", hover=string.(unsfpoints[1,:]), markershape=:x, color=1)
+	Plots.scatter!(safepoints[2,:], safepoints[3,:], label="Safe points", xlabel="Diameter", ylabel="Cost", hover=string.(safepoints[1,:]), color=1)
 	
-	Plots.scatter(points[2,:], points[3,:], label="Exhaustive search", xlabel="Diameter", ylabel="Cost", hover=string.(points[1,:]), markershape=ifelse.(points[4,:], :o, :x), color=1)
+	# Plots.scatter(points[2,:], points[3,:], label="Exhaustive search", xlabel="Diameter", ylabel="Cost", hover=string.(points[1,:]), shape=get_shape(points[1,:], :o, :x), color=1)
 end
 
 # ╔═╡ 4f89e331-b945-4290-8d21-a2c108ee5d92
@@ -257,8 +282,6 @@ Furthermore, it is easy to extract the Pareto front from the data.
 """
 
 # ╔═╡ ca409632-0ec3-4545-99f6-20d389a81f23
-# ╠═╡ disabled = true
-#=╠═╡
 optimal = let
 	optimal = [(0, 0, 0, 0, 0); Inf; Inf; false]
 	for p in eachcol(points)
@@ -274,7 +297,6 @@ optimal = let
 	end
 	optimal[:,2:end]
 end
-  ╠═╡ =#
 
 # ╔═╡ 3837f2d6-693f-46cb-8418-54d2a5f7e47e
 #=╠═╡
@@ -295,8 +317,6 @@ dets = [abs(det(Φ[begin:end .!= i, begin:end .!= i])) for i in axes(Φ, 1)]
 perm_mat = I(5)[sortperm(dets, by=i -> -i),:]
 
 # ╔═╡ ee661a94-05a5-4023-b16d-4e78b90ec8a8
-# ╠═╡ disabled = true
-#=╠═╡
 heur2 = let
 	tradeoffmap = efficient_net_map
 	W = Zonotope(zeros(axes(Φ, 1)), diagm(tradeoffmap[[1, 1, 1, 1, 1], 2]))
@@ -317,7 +337,6 @@ heur2 = let
 	@info reach_counter
 	heur
 end
-  ╠═╡ =#
 
 # ╔═╡ 8964836c-ca2d-4a1d-8565-6e542e20aa1b
 md"""
@@ -327,8 +346,6 @@ In this section, we develop a heuristic for extracting a near-optimial set of so
 """
 
 # ╔═╡ 27e7da0c-500a-432a-a2ca-b96a4da88436
-# ╠═╡ disabled = true
-#=╠═╡
 heur, inte = let
 	tradeoffmap = efficient_net_map
 	W = Zonotope(zeros(axes(Φ, 1)), diagm(tradeoffmap[[1, 1, 1, 1, 1], 2]))
@@ -398,7 +415,6 @@ heur, inte = let
 	@info reach_counter
 	heur, inte
 end
-  ╠═╡ =#
 
 # ╔═╡ 8eb8896c-c54e-4cf6-b71d-945f21432b43
 #=╠═╡
@@ -409,6 +425,23 @@ size(inte)
 md"""
 ## Heuristic Using Sensitivity Analysis
 """
+
+# ╔═╡ 05faadb9-28a7-48aa-b9b2-90d1010b6092
+heur3 = let
+	uniform_budgets = range(5*efficient_net_map[1,3], 5*efficient_net_map[n,3], 40)
+	@info length(uniform_budgets)
+	mul_sensitivity = [0.45, 0.29, 0.48, 0.68, 0.27]
+	val = map(uniform_budgets) do budget
+	    selection = heuristic3(mul_sensitivity, budget, efficient_net_map)
+	end
+	
+	points = map(val) do selection
+		W = Zonotope(zeros(axes(Φ, 1)), diagm(efficient_net_map[selection, 2]))
+		r = reach(Φ, x0, W, 100)
+		[Tuple(selection), maximum([diameter(x.X) for x in r]), sum(efficient_net_map[selection,3])]
+	end
+	hcat(points...)
+end
 
 # ╔═╡ c73b8dcf-73bd-43d2-9d5f-5ea680c1e169
 # ╠═╡ disabled = true
@@ -423,23 +456,6 @@ all_budgets = let
 	Set(all_budgets) |> collect |> sort
 end
   ╠═╡ =#
-
-# ╔═╡ 05faadb9-28a7-48aa-b9b2-90d1010b6092
-heur3 = let
-	uniform_budgets = range(5*efficient_net_map[1,3], 5*efficient_net_map[n,3], 40)
-	@info length(uniform_budgets)
-	mul_sensitivity = [0.45, 0.29, 0.48, 0.68, 0.27]
-	val = map(uniform_budgets) do budget
-	    selection = heuristic3(mul_sensitivity, budget, efficient_net_map)
-	end
-	
-	points = map(val) do selection
-		W = Zonotope(zeros(axes(Φ, 1)), diagm(efficient_net_map[selection, 2]))
-		r = reach(Φ, x0, W, 100)
-		[maximum([diameter(x.X) for x in r]), sum(efficient_net_map[selection,3]), ]
-	end
-	hcat(points...)
-end
 
 # ╔═╡ fa71efe9-ccfa-4075-85b5-c7e5297f99a0
 #=╠═╡
@@ -475,61 +491,110 @@ Plotting the optimal solutions, we can see that almost the entire Pareto front f
 """
 
 # ╔═╡ 60e5b3a5-7aac-4eee-8366-a45b9bfb8210
-#=╠═╡
 begin
-	plt_dp = Plots.scatter(points[2,:], points[3,:], label="Exhaustive Search", xlabel="Diameter", ylabel="Cost", 
+	# plt_dp = Plots.scatter(points[2,:], points[3,:], label="Exhaustive Search", xlabel="Diameter", ylabel="Cost", 
+	# 	xlabelfontsize=15,
+	# 	ylabelfontsize=15,
+	# 	xtickfontsize=12,
+	# 	ytickfontsize=12,
+	# 	legendfontsize=12,
+	# 	# shape=ifelse.(points[4,:], :o, :x),
+	# 	color=RGB(0.90,0.97,1), markerstrokecolor=RGB(0.9,0.9,0.9))
+	# # plt = Plots.scatter(optimal[2,:], optimal[3,:], label="Optimal solutions", xlabel="Diameter", ylabel="Cost", hover=string.(optimal[1,:]))
+	# Plots.scatter!(inte[2,:], inte[3,:], 
+	# 	# shape=ifelse.(inte[4,:], :diamond, :x),
+	# 	shape=:diamond,
+	# 	label="Dynamic Programming (pruned)", 
+	# 	color=3)
+	# Plots.scatter!(heur[2,:], heur[3,:], 
+	# 	# shape=ifelse.(heur[4,:], :diamond, :x),
+	# 	shape=:diamond,
+	# 	label="Dynamic Programming", 
+	# 	color=2)
+	# Plots.savefig(plt_dp, "../images/dp.pdf")
+	# plt_dp
+
+	plt_dp = Plots.scatter(safepoints[2,:], safepoints[3,:], label="Exhaustive Search", xlabel="Diameter", ylabel="Cost", 
 		xlabelfontsize=15,
 		ylabelfontsize=15,
 		xtickfontsize=12,
 		ytickfontsize=12,
 		legendfontsize=12,
-		# shape=ifelse.(points[4,:], :o, :x),
 		color=RGB(0.90,0.97,1), markerstrokecolor=RGB(0.9,0.9,0.9))
-	# plt = Plots.scatter(optimal[2,:], optimal[3,:], label="Optimal solutions", xlabel="Diameter", ylabel="Cost", hover=string.(optimal[1,:]))
-	Plots.scatter!(inte[2,:], inte[3,:], 
+	Plots.scatter!(unsfpoints[2,:], unsfpoints[3,:], label="Exhaustive Search (unsafe)",color=RGB(0.90,0.97,1), markerstrokecolor=RGB(0.9,0.9,0.9), shape=:x)
+	h1safe, h1unsf = sep_points(heur)
+	i1safe, i1unsf = sep_points(inte)
+	
+	Plots.scatter!(i1safe[2,:], i1safe[3,:], 
 		# shape=ifelse.(inte[4,:], :diamond, :x),
 		shape=:diamond,
 		label="Dynamic Programming (pruned)", 
 		color=3)
-	Plots.scatter!(heur[2,:], heur[3,:], 
+	Plots.scatter!(i1unsf[2,:], i1unsf[3,:], 
+		# shape=ifelse.(inte[4,:], :diamond, :x),
+		shape=:x,
+		label="Dynamic Programming (pruned, unsafe)", 
+		color=3)
+	Plots.scatter!(h1safe[2,:], h1safe[3,:], 
 		# shape=ifelse.(heur[4,:], :diamond, :x),
 		shape=:diamond,
 		label="Dynamic Programming", 
 		color=2)
-	Plots.savefig(plt_dp, "../images/dp.pdf")
+	Plots.scatter!(h1unsf[2,:], h1unsf[3,:], 
+		# shape=ifelse.(heur[4,:], :diamond, :x),
+		shape=:x,
+		label="Dynamic Programming (unsafe)", 
+		color=2)
+	Plots.savefig(plt_dp, "../images/dp-safe.pdf")
 	plt_dp
 end
-  ╠═╡ =#
 
 # ╔═╡ 53c3f6d9-4cfa-407a-8a17-50320eb97290
-#=╠═╡
 begin
-	plt_fi = Plots.scatter(points[2,:], points[3,:], label="Exhaustive Search", xlabel="Diameter", ylabel="Cost", 
+	plt_fi = Plots.scatter(safepoints[2,:], safepoints[3,:], label="Exhaustive Search", xlabel="Diameter", ylabel="Cost", 
 		xlabelfontsize=15,
 		ylabelfontsize=15,
 		xtickfontsize=12,
 		ytickfontsize=12,
 		legendfontsize=12,
 		color=RGB(0.90,0.97,1), markerstrokecolor=RGB(0.9,0.9,0.9))
+	Plots.scatter!(unsfpoints[2,:], unsfpoints[3,:], label="Exhaustive Search (unsafe)",color=RGB(0.90,0.97,1), markerstrokecolor=RGB(0.9,0.9,0.9), shape=:x)
 	# plt = Plots.scatter(optimal[2,:], optimal[3,:], label="Optimal solutions", xlabel="Diameter", ylabel="Cost", hover=string.(optimal[1,:]))
-	Plots.scatter!(heur2[2,:], heur2[3,:], shape=:diamond, label="Fast Iterative")
-	Plots.savefig(plt_fi, "../images/fi.pdf")
+	h2safe, h2unsf = sep_points(heur2)
+	Plots.scatter!(h2safe[2,:], h2safe[3,:], shape=:diamond, label="Fast Iterative", color=2)
+	Plots.scatter!(h2unsf[2,:], h2unsf[3,:], shape=:x, label="Fast Iterative (unsafe)", color=2)
+	# Plots.scatter!(heur2[2,:], heur2[3,:], shape=:diamond, label="Fast Iterative")
+	Plots.savefig(plt_fi, "../images/fi-safe.pdf")
 	plt_fi
 end
-  ╠═╡ =#
 
 # ╔═╡ bdc43369-da5f-4950-b0df-a8c49814eaba
 begin
-	plt_sv = Plots.scatter(points[2,:], points[3,:], label="Exhaustive Search", xlabel="Diameter", ylabel="Cost", 
+	# plt_sv = Plots.scatter(points[2,:], points[3,:], label="Exhaustive Search", xlabel="Diameter", ylabel="Cost", 
+	# 	xlabelfontsize=15,
+	# 	ylabelfontsize=15,
+	# 	xtickfontsize=12,
+	# 	ytickfontsize=12,
+	# 	legendfontsize=12,
+	# 	color=RGB(0.90,0.97,1), markerstrokecolor=RGB(0.9,0.9,0.9))
+	# # plt = Plots.scatter(optimal[2,:], optimal[3,:], label="Optimal solutions", xlabel="Diameter", ylabel="Cost", hover=string.(optimal[1,:]))
+	# Plots.scatter!(heur3[1,:], heur3[2,:], shape=:diamond, label="Sensitivity Analysis")
+	# Plots.savefig(plt_sv, "../images/sv.pdf")
+	# plt_sv
+
+	plt_sv = Plots.scatter(safepoints[2,:], safepoints[3,:], label="Exhaustive Search", xlabel="Diameter", ylabel="Cost", 
 		xlabelfontsize=15,
 		ylabelfontsize=15,
 		xtickfontsize=12,
 		ytickfontsize=12,
 		legendfontsize=12,
 		color=RGB(0.90,0.97,1), markerstrokecolor=RGB(0.9,0.9,0.9))
-	# plt = Plots.scatter(optimal[2,:], optimal[3,:], label="Optimal solutions", xlabel="Diameter", ylabel="Cost", hover=string.(optimal[1,:]))
-	Plots.scatter!(heur3[1,:], heur3[2,:], shape=:diamond, label="Sensitivity Analysis")
-	Plots.savefig(plt_sv, "../images/sv.pdf")
+	Plots.scatter!(unsfpoints[2,:], unsfpoints[3,:], label="Exhaustive Search (unsafe)",color=RGB(0.90,0.97,1), markerstrokecolor=RGB(0.9,0.9,0.9), shape=:x)
+	
+	h3safe, h3unsf = sep_points(heur3)
+	Plots.scatter!(h3safe[2,:], h3safe[3,:], shape=:diamond, label="Sensitivity Analysis", color=2)
+	Plots.scatter!(h3unsf[2,:], h3unsf[3,:], shape=:x, label="Sensitivity Analysis (unsafe)", color=2)
+	Plots.savefig(plt_sv, "../images/sv-safe.pdf")
 	plt_sv
 end
 
@@ -2837,6 +2902,7 @@ version = "1.4.1+1"
 # ╠═c634038a-5ec2-4c6a-97af-d340617eef89
 # ╟─4af7631d-60c5-4739-8b42-da77fcff8701
 # ╠═9e143da7-bd8e-4123-8ac7-bcb4a93fe797
+# ╠═106b5ce1-053e-47c4-83f1-130274d727ed
 # ╠═6a7be35e-ee7b-48a8-83a0-2e1c8163170a
 # ╠═4f89e331-b945-4290-8d21-a2c108ee5d92
 # ╟─82bf5d67-053a-4450-b7bc-dd7b02c86529
