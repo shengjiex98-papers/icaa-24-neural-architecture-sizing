@@ -26,6 +26,7 @@ begin
 	using JLD2
 	using PlotlyJS
 	plotlyjs()
+	TableOfContents()
 end
 
 # ╔═╡ c82e1d58-759d-4208-8be0-bef20ee6abb4
@@ -187,8 +188,11 @@ We map the accuracy in percent to a noise bound in the range ``[0, ∞)`` by tak
 # ╔═╡ b4e50b7b-e43c-4653-be47-36512f06d1df
 efficient_net_map_full = vcat(([100/b.acc1 - 1;; 100/b.acc5 - 1;; b.flop] for b in efficient_net_surfaces)...)
 
+# ╔═╡ 01356e5b-c44c-4098-aa2a-b009b49b9679
+n = 8
+
 # ╔═╡ c93415c5-f0a5-4dd1-9267-7e6443f6a08f
-efficient_net_map = efficient_net_map_full[1:5,:]
+efficient_net_map = efficient_net_map_full[1:n,:]
 
 # ╔═╡ ffba1085-cce5-4b35-9271-97683e6da157
 md"""
@@ -199,6 +203,9 @@ The next cell calculates an exhaustive search of all EfficientNet options for ea
 """
 
 # ╔═╡ c634038a-5ec2-4c6a-97af-d340617eef89
+# ╠═╡ disabled = true
+# ╠═╡ skip_as_script = true
+#=╠═╡
 points = let
 	points = [(0, 0, 0, 0, 0); Inf; Inf]
 	for indices in Iterators.product([axes(efficient_net_map, 1) for _ in axes(Φ, 1)]...)
@@ -209,6 +216,7 @@ points = let
 	end
 	points
 end
+  ╠═╡ =#
 
 # ╔═╡ 4af7631d-60c5-4739-8b42-da77fcff8701
 md"""
@@ -216,10 +224,22 @@ We can then view the points as a table, or as a scatter plot.
 """
 
 # ╔═╡ 9e143da7-bd8e-4123-8ac7-bcb4a93fe797
-points
+begin
+	points = load("../data/exhaustive_search.jld2")["points"][:,2:end]
+	points = points[:, map(x -> reduce(&, x .<= n), points[1,:])]
+	# @info 
+	# safepoints = points[1:3, BitVector(points[4,:])]
+	# unsfpoints = points[1:3, BitVector(.!points[4,:])]
+	# points = points[1:3, :]
+end
 
 # ╔═╡ 6a7be35e-ee7b-48a8-83a0-2e1c8163170a
-Plots.scatter(points[2,:], points[3,:], label="Exhaustive search", xlabel="Diameter", ylabel="Cost", hover=string.(points[1,:]))
+begin
+	# Plots.scatter(unsfpoints[2,:], unsfpoints[3,:], label="Unsafe points", xlabel="Diameter", ylabel="Cost", hover=string.(unsfpoints[1,:]), markershape=:x, color=1)
+	# Plots.scatter!(safepoints[2,:], safepoints[3,:], label="Safe points", xlabel="Diameter", ylabel="Cost", hover=string.(safepoints[1,:]), color=1)
+	
+	Plots.scatter(points[2,:], points[3,:], label="Exhaustive search", xlabel="Diameter", ylabel="Cost", hover=string.(points[1,:]), markershape=ifelse.(points[4,:], :o, :x), color=1)
+end
 
 # ╔═╡ 4f89e331-b945-4290-8d21-a2c108ee5d92
 begin
@@ -237,8 +257,10 @@ Furthermore, it is easy to extract the Pareto front from the data.
 """
 
 # ╔═╡ ca409632-0ec3-4545-99f6-20d389a81f23
+# ╠═╡ disabled = true
+#=╠═╡
 optimal = let
-	optimal = [(0, 0, 0, 0, 0); Inf; Inf]
+	optimal = [(0, 0, 0, 0, 0); Inf; Inf; false]
 	for p in eachcol(points)
 		add = true
 		for q in eachcol(points)
@@ -247,19 +269,24 @@ optimal = let
 			end
 		end
 		if add
-			optimal = hcat(optimal, reshape(collect(p), 3, 1))
+			optimal = hcat(optimal, reshape(collect(p), 4, 1))
 		end
 	end
-	optimal
+	optimal[:,2:end]
 end
+  ╠═╡ =#
 
 # ╔═╡ 3837f2d6-693f-46cb-8418-54d2a5f7e47e
+#=╠═╡
 Plots.scatter(optimal[2,:], optimal[3,:], label="Exhaustive search", xlabel="Diameter", ylabel="Cost", hover=string.(optimal[1,:]))
+  ╠═╡ =#
 
 # ╔═╡ f70a5855-c799-43f6-ae1c-888c1ef2e85c
+#=╠═╡
 for o in eachcol(optimal)
 	@info o
 end
+  ╠═╡ =#
 
 # ╔═╡ 44919be2-e2a6-485b-96ea-ac6c7eb708aa
 dets = [abs(det(Φ[begin:end .!= i, begin:end .!= i])) for i in axes(Φ, 1)]
@@ -268,6 +295,8 @@ dets = [abs(det(Φ[begin:end .!= i, begin:end .!= i])) for i in axes(Φ, 1)]
 perm_mat = I(5)[sortperm(dets, by=i -> -i),:]
 
 # ╔═╡ ee661a94-05a5-4023-b16d-4e78b90ec8a8
+# ╠═╡ disabled = true
+#=╠═╡
 heur2 = let
 	tradeoffmap = efficient_net_map
 	W = Zonotope(zeros(axes(Φ, 1)), diagm(tradeoffmap[[1, 1, 1, 1, 1], 2]))
@@ -288,6 +317,7 @@ heur2 = let
 	@info reach_counter
 	heur
 end
+  ╠═╡ =#
 
 # ╔═╡ 8964836c-ca2d-4a1d-8565-6e542e20aa1b
 md"""
@@ -297,6 +327,8 @@ In this section, we develop a heuristic for extracting a near-optimial set of so
 """
 
 # ╔═╡ 27e7da0c-500a-432a-a2ca-b96a4da88436
+# ╠═╡ disabled = true
+#=╠═╡
 heur, inte = let
 	tradeoffmap = efficient_net_map
 	W = Zonotope(zeros(axes(Φ, 1)), diagm(tradeoffmap[[1, 1, 1, 1, 1], 2]))
@@ -366,9 +398,12 @@ heur, inte = let
 	@info reach_counter
 	heur, inte
 end
+  ╠═╡ =#
 
 # ╔═╡ 8eb8896c-c54e-4cf6-b71d-945f21432b43
+#=╠═╡
 size(inte)
+  ╠═╡ =#
 
 # ╔═╡ 271efb4d-b349-4531-b020-3a0c4106dae5
 md"""
@@ -376,18 +411,22 @@ md"""
 """
 
 # ╔═╡ c73b8dcf-73bd-43d2-9d5f-5ea680c1e169
+# ╠═╡ disabled = true
+# ╠═╡ skip_as_script = true
+#=╠═╡
 all_budgets = let
 	# Enumerate all possible selections
-	all_selections = reshape(Iterators.product(fill([1,2,3,4,5],5)...) |> collect, :)
+	all_selections = reshape(Iterators.product(fill(collect(1:n),5)...) |> collect, :)
 	# Get cost (potential budget levels) for each selection
 	all_budgets = map(x -> sum(efficient_net_map[collect(x),3]), all_selections)
 	# Remove duplicate and sort
 	Set(all_budgets) |> collect |> sort
 end
+  ╠═╡ =#
 
 # ╔═╡ 05faadb9-28a7-48aa-b9b2-90d1010b6092
 heur3 = let
-	uniform_budgets = 2:0.5:21
+	uniform_budgets = range(5*efficient_net_map[1,3], 5*efficient_net_map[n,3], 40)
 	@info length(uniform_budgets)
 	mul_sensitivity = [0.45, 0.29, 0.48, 0.68, 0.27]
 	val = map(uniform_budgets) do budget
@@ -403,9 +442,12 @@ heur3 = let
 end
 
 # ╔═╡ fa71efe9-ccfa-4075-85b5-c7e5297f99a0
+#=╠═╡
 size(optimal)
+  ╠═╡ =#
 
 # ╔═╡ 843cb555-5ac2-4956-9245-65b6cdcdb847
+#=╠═╡
 begin
 	plt_es = Plots.scatter(
 		points[2,:], points[3,:], label="Exhaustive Search", 
@@ -415,12 +457,17 @@ begin
 		xtickfontsize=12,
 		ytickfontsize=12,
 		legendfontsize=12,
+		# shape=ifelse.(points[4,:], :o, :x),
 		# color=RGB(0.90,0.97,1), markerstrokecolor=RGB(0.9,0.9,0.9)
 	)
-	scatter!(plt_es, optimal[2,:], optimal[3,:], label="Optimal solutions", shape=:diamond)
+	scatter!(plt_es, optimal[2,:], optimal[3,:], 
+		label="Optimal solutions", 
+		# shape=ifelse.(optimal[4,:], :diamond, :x)
+	)
 	Plots.savefig(plt_es, "../images/es.pdf")
 	plt_es
 end
+  ╠═╡ =#
 
 # ╔═╡ a95d593c-3da8-4f09-9b99-a3d6020772dd
 md"""
@@ -428,6 +475,7 @@ Plotting the optimal solutions, we can see that almost the entire Pareto front f
 """
 
 # ╔═╡ 60e5b3a5-7aac-4eee-8366-a45b9bfb8210
+#=╠═╡
 begin
 	plt_dp = Plots.scatter(points[2,:], points[3,:], label="Exhaustive Search", xlabel="Diameter", ylabel="Cost", 
 		xlabelfontsize=15,
@@ -435,15 +483,26 @@ begin
 		xtickfontsize=12,
 		ytickfontsize=12,
 		legendfontsize=12,
+		# shape=ifelse.(points[4,:], :o, :x),
 		color=RGB(0.90,0.97,1), markerstrokecolor=RGB(0.9,0.9,0.9))
 	# plt = Plots.scatter(optimal[2,:], optimal[3,:], label="Optimal solutions", xlabel="Diameter", ylabel="Cost", hover=string.(optimal[1,:]))
-	Plots.scatter!(inte[2,:], inte[3,:], shape=:diamond, label="Dynamic Programming (pruned)", color=3)
-	Plots.scatter!(heur[2,:], heur[3,:], shape=:diamond, label="Dynamic Programming", color=2)
+	Plots.scatter!(inte[2,:], inte[3,:], 
+		# shape=ifelse.(inte[4,:], :diamond, :x),
+		shape=:diamond,
+		label="Dynamic Programming (pruned)", 
+		color=3)
+	Plots.scatter!(heur[2,:], heur[3,:], 
+		# shape=ifelse.(heur[4,:], :diamond, :x),
+		shape=:diamond,
+		label="Dynamic Programming", 
+		color=2)
 	Plots.savefig(plt_dp, "../images/dp.pdf")
 	plt_dp
 end
+  ╠═╡ =#
 
 # ╔═╡ 53c3f6d9-4cfa-407a-8a17-50320eb97290
+#=╠═╡
 begin
 	plt_fi = Plots.scatter(points[2,:], points[3,:], label="Exhaustive Search", xlabel="Diameter", ylabel="Cost", 
 		xlabelfontsize=15,
@@ -457,6 +516,7 @@ begin
 	Plots.savefig(plt_fi, "../images/fi.pdf")
 	plt_fi
 end
+  ╠═╡ =#
 
 # ╔═╡ bdc43369-da5f-4950-b0df-a8c49814eaba
 begin
@@ -2756,10 +2816,10 @@ version = "1.4.1+1"
 # ╟─9d894075-9124-42b3-905e-38f0feb5a48f
 # ╠═55ddf867-1e6d-4031-b444-f78f6ab9c00f
 # ╠═e10a2d14-fec7-41d2-8ae5-acf442d7048a
-# ╟─0bd72276-5100-4c1d-843c-b6335734dc9f
+# ╠═0bd72276-5100-4c1d-843c-b6335734dc9f
 # ╟─a39ef73d-093f-4cf5-b9e6-26f0b3352415
-# ╟─b688e2bc-9ffd-4c49-97d7-8c7632228d62
-# ╟─5eec7abd-6c21-47e4-a5d6-af807fb751a7
+# ╠═b688e2bc-9ffd-4c49-97d7-8c7632228d62
+# ╠═5eec7abd-6c21-47e4-a5d6-af807fb751a7
 # ╟─6685d33f-f5ba-46a0-b3bc-e481ccfa32e6
 # ╟─817af150-5516-4c49-9401-72d4c68ded68
 # ╠═dceafb86-5583-47fc-af48-88edce5d57a4
@@ -2768,9 +2828,10 @@ version = "1.4.1+1"
 # ╠═96f1cf81-d479-45e9-982b-cad1530e9048
 # ╠═1e8112d9-75b1-419d-872a-d80cba669f2a
 # ╟─dc34a7f4-2810-4a6f-8043-231e5741500d
-# ╟─b1597652-8662-411a-8974-979358fa9f6d
+# ╠═b1597652-8662-411a-8974-979358fa9f6d
 # ╟─c2e067fc-05e4-4fdc-9655-dd4259b11c19
 # ╠═b4e50b7b-e43c-4653-be47-36512f06d1df
+# ╠═01356e5b-c44c-4098-aa2a-b009b49b9679
 # ╠═c93415c5-f0a5-4dd1-9267-7e6443f6a08f
 # ╟─ffba1085-cce5-4b35-9271-97683e6da157
 # ╠═c634038a-5ec2-4c6a-97af-d340617eef89
@@ -2790,8 +2851,8 @@ version = "1.4.1+1"
 # ╠═8eb8896c-c54e-4cf6-b71d-945f21432b43
 # ╟─271efb4d-b349-4531-b020-3a0c4106dae5
 # ╠═c82e1d58-759d-4208-8be0-bef20ee6abb4
-# ╠═c73b8dcf-73bd-43d2-9d5f-5ea680c1e169
 # ╠═05faadb9-28a7-48aa-b9b2-90d1010b6092
+# ╠═c73b8dcf-73bd-43d2-9d5f-5ea680c1e169
 # ╠═fa71efe9-ccfa-4075-85b5-c7e5297f99a0
 # ╠═843cb555-5ac2-4956-9245-65b6cdcdb847
 # ╟─a95d593c-3da8-4f09-9b99-a3d6020772dd
