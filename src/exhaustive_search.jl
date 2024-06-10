@@ -49,10 +49,10 @@ const x0 = Zonotope(fill(10., 5), collect(1.0 * I(5)))
 
 const dist_yolo_tradeoffs = (
     MobileNetv3_small = (err=47.66, gflop=9.869),
-    MobileNetv3_large = (err=32.90, gflop=43.731),
-    MobileNet =         (err=41.05, gflop=43.302),
-    MobileNetv2 =       (err=44.31, gflop=43.786),
+    # MobileNetv2 =       (err=44.31, gflop=43.786),
     ShuffleNetv2 =      (err=44.31, gflop=37.916),
+    MobileNet =         (err=41.05, gflop=43.302),
+    MobileNetv3_large = (err=32.90, gflop=43.731),
     Xception =          (err=26.91, gflop=104.002),
 )
 const tradeoff_map = vcat(([nn.err nn.gflop] for nn in dist_yolo_tradeoffs)...)
