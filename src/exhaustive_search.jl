@@ -70,5 +70,6 @@ function exhaustive_search(tradeoffmap, Φ, x0, all=true)
 	points[:,2:end]
 end
 
+@info "Start searching"
 @time res = exhaustive_search(tradeoff_map, Φ, x0)
 serialize("../data/exhaustive_points.jls", res)
