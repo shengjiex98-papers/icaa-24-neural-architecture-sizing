@@ -57,19 +57,19 @@ const dist_yolo_tradeoffs = (
 )
 const tradeoff_map = vcat(([nn.err nn.gflop] for nn in dist_yolo_tradeoffs)...)
 
-function exhaustive_search(tradeoffmap, Φ, x0, all=true)
-	upto = size(tradeoffmap, 1)
+function exhaustive_search(tradeoff_map, Φ, x0, all=true)
+	upto = size(tradeoff_map, 1)
 	points = [(0,0,0,0,0); Inf; Inf]
-	for idx in Iterators.product(fill(axes(tradeoffmap, 1), size(Φ, 1))...)
+	for idx in Iterators.product(fill(axes(tradeoff_map, 1), size(Φ, 1))...)
 		all || reduce(|, map(x -> x == upto, idx)) || continue
-		W = Zonotope(zeros(axes(Φ, 1)), diagm(tradeoffmap[collect(idx), 1]))
+		W = Zonotope(zeros(axes(Φ, 1)), diagm(tradeoff_map[collect(idx), 1]))
 		r = reach(Φ, x0, W, 100)
 		md = maximum([diameter(x.X) for x in r])
-		points = hcat(points, [idx; md; sum(tradeoffmap[collect(idx), 2])])
+		points = hcat(points, [idx; md; sum(tradeoff_map[collect(idx), 2])])
 	end
 	points[:,2:end]
 end
 
 @info "Start searching"
 @time res = exhaustive_search(tradeoff_map, Φ, x0)
-serialize("../data/exhaustive_points.jls", res)
+serialize("../data/dist_yolo_points.jls", res)
