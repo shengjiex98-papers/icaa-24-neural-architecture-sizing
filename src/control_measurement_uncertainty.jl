@@ -1,5 +1,5 @@
 ### A Pluto.jl notebook ###
-# v0.19.32
+# v0.19.42
 
 using Markdown
 using InteractiveUtils
@@ -12,21 +12,6 @@ macro bind(def, element)
         global $(esc(def)) = Core.applicable(Base.get, el) ? Base.get(el) : iv(el)
         el
     end
-end
-
-# ╔═╡ bb3cab62-56f4-11ee-06e1-7b7ccfafe8a9
-begin
-	using ReachabilityAnalysis
-	using Plots
-	using ControlSystemsBase
-	using OffsetArrays
-	using PlutoUI
-	using LinearAlgebra
-	using Polyhedra
-	using JLD2
-	using PlotlyJS
-	plotlyjs()
-	TableOfContents()
 end
 
 # ╔═╡ c82e1d58-759d-4208-8be0-bef20ee6abb4
@@ -53,6 +38,21 @@ begin
 	    map(argmax, [value.(a)[i,:] for i in axes(value.(a),1)])
 	end
 	
+end
+
+# ╔═╡ bb3cab62-56f4-11ee-06e1-7b7ccfafe8a9
+begin
+	using ReachabilityAnalysis
+	using Plots
+	using ControlSystemsBase
+	using OffsetArrays
+	using PlutoUI
+	using LinearAlgebra
+	using Polyhedra
+	using JLD2
+	using PlotlyJS
+	plotlyjs()
+	TableOfContents()
 end
 
 # ╔═╡ 02e741a7-8610-4000-9296-ce60f773f17f
@@ -130,7 +130,7 @@ We then instantiate with an initial condition and a user-adjustable noise term.
 """
 
 # ╔═╡ b688e2bc-9ffd-4c49-97d7-8c7632228d62
-x0 = Zonotope([10., 10., 10., 10., 10.], [1; 0; 0; 0; 0;; 0; 1.; 0; 0; 0;; 0; 0; 1; 0; 0;; 0; 0; 0; 1; 0;; 0; 0; 0; 0; 1])
+x0 = Zonotope([10., 10., 10., 10., 10.], collect(1. * I(5)))
 
 # ╔═╡ 6685d33f-f5ba-46a0-b3bc-e481ccfa32e6
 md"""Noise $(@bind noise Slider(0:0.01:0.1))"""
@@ -167,8 +167,7 @@ md"""
 In this section, we examine the tradeoff between accuracy and cost of neural networks used for state sensing.  We begin by loading the accuracy and cost of running EfficientNet for image classification tasks, which we use as a model of accuracy vs. cost of state estimation.
 """
 
-# ╔═╡ b1597652-8662-411a-8974-979358fa9f6d
-# Accuracy (top-1/top-5) in percentage, parameter in millions, FLOP in billions
+# ╔═╡ f2722a1b-9c28-4743-96b8-e603ede1c8bf
 efficient_net_surfaces = (
     B0 = (acc1 = 77.1, acc5 = 93.3, para = 5.3, flop = 0.39),
     B1 = (acc1 = 79.1, acc5 = 94.4, para = 7.8, flop = 0.70),
@@ -180,19 +179,19 @@ efficient_net_surfaces = (
     B7 = (acc1 = 84.3, acc5 = 97.0, para = 66, flop = 37),
 )
 
+# ╔═╡ 5b707ef0-30ac-4bef-8711-e536b93343e1
+efficient_net_map_full = vcat(([100/b.acc1 - 1;; 100/b.acc5 - 1;; b.flop] for b in efficient_net_surfaces)...)
+
 # ╔═╡ c2e067fc-05e4-4fdc-9655-dd4259b11c19
 md"""
 We map the accuracy in percent to a noise bound in the range ``[0, ∞)`` by taking ``\frac{100}{acc} - 1``.
 """
 
-# ╔═╡ b4e50b7b-e43c-4653-be47-36512f06d1df
-efficient_net_map_full = vcat(([100/b.acc1 - 1;; 100/b.acc5 - 1;; b.flop] for b in efficient_net_surfaces)...)
-
-# ╔═╡ 01356e5b-c44c-4098-aa2a-b009b49b9679
+# ╔═╡ 12f96485-a85a-479d-aeb3-7a9a196b3e62
 n = 5
 
 # ╔═╡ c93415c5-f0a5-4dd1-9267-7e6443f6a08f
-efficient_net_map = efficient_net_map_full[1:n,:]
+efficient_net_map = efficient_net_map_full[1:n, :]
 
 # ╔═╡ ffba1085-cce5-4b35-9271-97683e6da157
 md"""
@@ -202,38 +201,13 @@ The next cell calculates an exhaustive search of all EfficientNet options for ea
     Do not enable this cell unless you are prepared to run a ~30 minute calculation!
 """
 
-# ╔═╡ c634038a-5ec2-4c6a-97af-d340617eef89
-# ╠═╡ disabled = true
-# ╠═╡ skip_as_script = true
-#=╠═╡
-points = let
-	points = [(0, 0, 0, 0, 0); Inf; Inf]
-	for indices in Iterators.product([axes(efficient_net_map, 1) for _ in axes(Φ, 1)]...)
-		W = Zonotope(zeros(axes(Φ, 1)), diagm(efficient_net_map[collect(indices), 2]))
-		r = reach(Φ, x0, W, 100)
-		md = maximum([diameter(x.X) for x in r])
-		points = hcat(points, [indices; md; sum(efficient_net_map[collect(indices), 3])])
-	end
-	points
-end
-  ╠═╡ =#
-
 # ╔═╡ 4af7631d-60c5-4739-8b42-da77fcff8701
 md"""
 We can then view the points as a table, or as a scatter plot.
 """
 
-# ╔═╡ 9e143da7-bd8e-4123-8ac7-bcb4a93fe797
-begin
-	allpoints = load("../data/exhaustive_search.jld2")["points"][:,2:end]
-	points = allpoints[1:4, map(x -> reduce(&, x .<= n), allpoints[1,:])]
-	# @info 
-	# safepoints = points[1:3, BitVector(points[4,:])]
-	# unsfpoints = points[1:3, BitVector(.!points[4,:])]
-	# points = points[1:3, :]
-end
-
 # ╔═╡ 106b5ce1-053e-47c4-83f1-130274d727ed
+#=╠═╡
 begin
 	diameters = zeros(8, 8, 8, 8, 8)
 	costs = zeros(8, 8, 8, 8, 8)
@@ -257,16 +231,20 @@ begin
 	end
 	safepoints, unsfpoints = sep_points(points)
 end
+  ╠═╡ =#
 
 # ╔═╡ 6a7be35e-ee7b-48a8-83a0-2e1c8163170a
+#=╠═╡
 begin
 	Plots.scatter(unsfpoints[2,:], unsfpoints[3,:], label="Unsafe points", xlabel="Diameter", ylabel="Cost", hover=string.(unsfpoints[1,:]), markershape=:x, color=1)
 	Plots.scatter!(safepoints[2,:], safepoints[3,:], label="Safe points", xlabel="Diameter", ylabel="Cost", hover=string.(safepoints[1,:]), color=1)
 	
 	# Plots.scatter(points[2,:], points[3,:], label="Exhaustive search", xlabel="Diameter", ylabel="Cost", hover=string.(points[1,:]), shape=get_shape(points[1,:], :o, :x), color=1)
 end
+  ╠═╡ =#
 
 # ╔═╡ 4f89e331-b945-4290-8d21-a2c108ee5d92
+#=╠═╡
 begin
 	pts = filter(x -> x[1][1] == 3 && x[1][2] == 3 && x[1][3] == 3 && x[1][4] == 3, eachcol(points))
 	Plots.scatter(points[2,:], points[3,:], label="Exhaustive search", hover=string.(points[1,:]))
@@ -275,6 +253,7 @@ begin
 	end
 	Plots.scatter!()
 end
+  ╠═╡ =#
 
 # ╔═╡ 82bf5d67-053a-4450-b7bc-dd7b02c86529
 md"""
@@ -282,6 +261,7 @@ Furthermore, it is easy to extract the Pareto front from the data.
 """
 
 # ╔═╡ ca409632-0ec3-4545-99f6-20d389a81f23
+#=╠═╡
 optimal = let
 	optimal = [(0, 0, 0, 0, 0); Inf; Inf; false]
 	for p in eachcol(points)
@@ -297,14 +277,19 @@ optimal = let
 	end
 	optimal[:,2:end]
 end
+  ╠═╡ =#
 
 # ╔═╡ 3837f2d6-693f-46cb-8418-54d2a5f7e47e
+#=╠═╡
 Plots.scatter(optimal[2,:], optimal[3,:], label="Exhaustive search", xlabel="Diameter", ylabel="Cost", hover=string.(optimal[1,:]))
+  ╠═╡ =#
 
 # ╔═╡ f70a5855-c799-43f6-ae1c-888c1ef2e85c
+#=╠═╡
 for o in eachcol(optimal)
 	@info o
 end
+  ╠═╡ =#
 
 # ╔═╡ 44919be2-e2a6-485b-96ea-ac6c7eb708aa
 dets = [abs(det(Φ[begin:end .!= i, begin:end .!= i])) for i in axes(Φ, 1)]
@@ -456,10 +441,16 @@ md"""
 ## Plots
 """
 
+# ╔═╡ 0bfc7a46-88ee-4314-9f47-82db0449aba4
+md"""Save plots? $(@bind toggle_saveplots CheckBox())"""
+
 # ╔═╡ fa71efe9-ccfa-4075-85b5-c7e5297f99a0
+#=╠═╡
 size(optimal)
+  ╠═╡ =#
 
 # ╔═╡ 843cb555-5ac2-4956-9245-65b6cdcdb847
+#=╠═╡
 begin
 	# plt_es = Plots.scatter(
 	# 	points[2,:], points[3,:], label="Exhaustive Search", 
@@ -507,9 +498,12 @@ begin
 		shape=:x,
 		color=2
 	)
-	Plots.savefig(plt_es, "../images/es-safe.pdf")
+	if toggle_saveplots
+		Plots.savefig(plt_es, "../images/es-safe.pdf")
+	end
 	plt_es
 end
+  ╠═╡ =#
 
 # ╔═╡ a95d593c-3da8-4f09-9b99-a3d6020772dd
 md"""
@@ -517,6 +511,7 @@ Plotting the optimal solutions, we can see that almost the entire Pareto front f
 """
 
 # ╔═╡ 60e5b3a5-7aac-4eee-8366-a45b9bfb8210
+#=╠═╡
 begin
 	# plt_dp = Plots.scatter(points[2,:], points[3,:], label="Exhaustive Search", xlabel="Diameter", ylabel="Cost", 
 	# 	xlabelfontsize=15,
@@ -571,30 +566,54 @@ begin
 		shape=:x,
 		label="Dynamic Programming (unsafe)", 
 		color=2)
-	Plots.savefig(plt_dp, "../images/dp-safe.pdf")
+	if toggle_saveplots
+		Plots.savefig(plt_dp, "../images/dp-safe.pdf")
+	end
 	plt_dp
 end
+  ╠═╡ =#
 
 # ╔═╡ 53c3f6d9-4cfa-407a-8a17-50320eb97290
+#=╠═╡
 begin
-	plt_fi = Plots.scatter(safepoints[2,:], safepoints[3,:], label="Exhaustive Search", xlabel="Diameter", ylabel="Cost", 
+	plt_fi = Plots.plot(
+		label="Exhaustive Search", 
+		xlabel="Maximum diameter of reachable sets", 
+		ylabel="Cost (billion FLOPs)", 
 		xlabelfontsize=15,
 		ylabelfontsize=15,
 		xtickfontsize=12,
 		ytickfontsize=12,
-		legendfontsize=12,
-		color=RGB(0.90,0.97,1), markerstrokecolor=RGB(0.9,0.9,0.9))
-	Plots.scatter!(unsfpoints[2,:], unsfpoints[3,:], label="Exhaustive Search (unsafe)",color=RGB(0.90,0.97,1), markerstrokecolor=RGB(0.9,0.9,0.9), shape=:x)
+		legendfontsize=12)
+	Plots.scatter!(points[2,:], points[3,:], 
+		label="Exhaustive Search",
+		color=RGB(0.90,0.97,1), 
+		markerstrokecolor=RGB(0.9,0.9,0.9), 
+		shape=:o)
+	# plt_fi = Plots.scatter(safepoints[2,:], safepoints[3,:], label="Exhaustive Search", xlabel="Maximum diameter of reachable sets", ylabel="Cost (billion FLOPs)", 
+	# 	xlabelfontsize=15,
+	# 	ylabelfontsize=15,
+	# 	xtickfontsize=12,
+	# 	ytickfontsize=12,
+	# 	legendfontsize=12,
+	# 	color=RGB(0.90,0.97,1), markerstrokecolor=RGB(0.9,0.9,0.9))
+	# Plots.scatter!(unsfpoints[2,:], unsfpoints[3,:], label="Exhaustive Search (unsafe)",color=RGB(0.90,0.97,1), markerstrokecolor=RGB(0.9,0.9,0.9), shape=:x)
+	
 	# plt = Plots.scatter(optimal[2,:], optimal[3,:], label="Optimal solutions", xlabel="Diameter", ylabel="Cost", hover=string.(optimal[1,:]))
-	h2safe, h2unsf = sep_points(heur2)
-	Plots.scatter!(h2safe[2,:], h2safe[3,:], shape=:diamond, label="Fast Iterative", color=2)
-	Plots.scatter!(h2unsf[2,:], h2unsf[3,:], shape=:x, label="Fast Iterative (unsafe)", color=2)
-	# Plots.scatter!(heur2[2,:], heur2[3,:], shape=:diamond, label="Fast Iterative")
-	Plots.savefig(plt_fi, "../images/fi-safe.pdf")
+	
+	# h2safe, h2unsf = sep_points(heur2)
+	# Plots.scatter!(h2safe[2,:], h2safe[3,:], shape=:diamond, label="Fast Iterative", color=2)
+	# Plots.scatter!(h2unsf[2,:], h2unsf[3,:], shape=:x, label="Fast Iterative (unsafe)", color=2)
+	Plots.scatter!(heur2[2,:], heur2[3,:], shape=:diamond, label="Fast Iterative")
+	if toggle_saveplots
+		Plots.savefig(plt_fi, "../images/fi.pdf")
+	end
 	plt_fi
 end
+  ╠═╡ =#
 
 # ╔═╡ bdc43369-da5f-4950-b0df-a8c49814eaba
+#=╠═╡
 begin
 	# plt_sv = Plots.scatter(points[2,:], points[3,:], label="Exhaustive Search", xlabel="Diameter", ylabel="Cost", 
 	# 	xlabelfontsize=15,
@@ -620,9 +639,12 @@ begin
 	h3safe, h3unsf = sep_points(heur3)
 	Plots.scatter!(h3safe[2,:], h3safe[3,:], shape=:diamond, label="Sensitivity Analysis", color=2)
 	Plots.scatter!(h3unsf[2,:], h3unsf[3,:], shape=:x, label="Sensitivity Analysis (unsafe)", color=2)
-	Plots.savefig(plt_sv, "../images/sv-safe.pdf")
+	if toggle_saveplots
+		Plots.savefig(plt_sv, "../images/sv-safe.pdf")
+	end
 	plt_sv
 end
+  ╠═╡ =#
 
 # ╔═╡ 57f35365-759f-40a0-8a22-b8e9299c95db
 md"""
@@ -665,6 +687,34 @@ md"""
 ### Imports
 """
 
+# ╔═╡ c634038a-5ec2-4c6a-97af-d340617eef89
+# ╠═╡ disabled = true
+# ╠═╡ skip_as_script = true
+#=╠═╡
+points = let
+	points = [(0, 0, 0, 0, 0); Inf; Inf]
+	for indices in Iterators.product([axes(efficient_net_map, 1) for _ in axes(Φ, 1)]...)
+		W = Zonotope(zeros(axes(Φ, 1)), diagm(efficient_net_map[collect(indices), 2]))
+		r = reach(Φ, x0, W, 100)
+		md = maximum([diameter(x.X) for x in r])
+		points = hcat(points, [indices; md; sum(efficient_net_map[collect(indices), 3])])
+	end
+	points
+end
+  ╠═╡ =#
+
+# ╔═╡ 9e143da7-bd8e-4123-8ac7-bcb4a93fe797
+#=╠═╡
+begin
+	allpoints = load("../data/exhaustive_search.jld2")["points"][:,2:end]
+	points = allpoints[1:4, map(x -> reduce(&, x .<= n), allpoints[1,:])]
+	# @info 
+	# safepoints = points[1:3, BitVector(points[4,:])]
+	# unsfpoints = points[1:3, BitVector(.!points[4,:])]
+	# points = points[1:3, :]
+end
+  ╠═╡ =#
+
 # ╔═╡ 00000000-0000-0000-0000-000000000001
 PLUTO_PROJECT_TOML_CONTENTS = """
 [deps]
@@ -686,7 +736,7 @@ HiGHS = "~1.7.5"
 JLD2 = "~0.4.35"
 JuMP = "~1.16.0"
 OffsetArrays = "~1.12.10"
-PlotlyJS = "~0.18.11"
+PlotlyJS = "~0.18.13"
 Plots = "~1.39.0"
 PlutoUI = "~0.7.52"
 Polyhedra = "~0.7.6"
@@ -697,9 +747,9 @@ ReachabilityAnalysis = "~0.22.1"
 PLUTO_MANIFEST_TOML_CONTENTS = """
 # This file is machine-generated - editing it directly is not advised
 
-julia_version = "1.9.3"
+julia_version = "1.10.4"
 manifest_format = "2.0"
-project_hash = "4a5535f62288a59737fb87470cbe5257c3f68355"
+project_hash = "57e64f01c846e849d8b6b8fc2d6efad8620b5e05"
 
 [[deps.ADTypes]]
 git-tree-sha1 = "5d2e21d7b0d8c22f67483ef95ebdc39c0e6b6003"
@@ -802,9 +852,9 @@ version = "0.1.5"
 
 [[deps.Blink]]
 deps = ["Base64", "Distributed", "HTTP", "JSExpr", "JSON", "Lazy", "Logging", "MacroTools", "Mustache", "Mux", "Pkg", "Reexport", "Sockets", "WebIO"]
-git-tree-sha1 = "b1c61fd7e757c7e5ca6521ef41df8d929f41e3af"
+git-tree-sha1 = "bc93511973d1f949d45b0ea17878e6cb0ad484a1"
 uuid = "ad839575-38b3-5650-b840-f874b8c74a25"
-version = "0.12.8"
+version = "0.12.9"
 
 [[deps.Bzip2_jll]]
 deps = ["Artifacts", "JLLWrappers", "Libdl", "Pkg"]
@@ -918,7 +968,7 @@ weakdeps = ["Dates", "LinearAlgebra"]
 [[deps.CompilerSupportLibraries_jll]]
 deps = ["Artifacts", "Libdl"]
 uuid = "e66e0078-7015-5450-92f7-15fbd957f2ae"
-version = "1.0.5+0"
+version = "1.1.1+0"
 
 [[deps.ConcreteStructs]]
 git-tree-sha1 = "f749037478283d372048690eb3b5f92a79432b34"
@@ -1293,7 +1343,7 @@ version = "5.0.1+0"
 [[deps.GMP_jll]]
 deps = ["Artifacts", "Libdl"]
 uuid = "781609d7-10c4-51f6-84f2-b8444358ff6d"
-version = "6.2.1+2"
+version = "6.2.1+6"
 
 [[deps.GPUArraysCore]]
 deps = ["Adapt"]
@@ -1385,7 +1435,7 @@ uuid = "87dc4568-4c63-4d18-b0c0-bb2238e4078b"
 version = "1.7.5"
 
 [[deps.HiGHS_jll]]
-deps = ["Artifacts", "CompilerSupportLibraries_jll", "JLLWrappers", "Libdl"]
+deps = ["Artifacts", "CompilerSupportLibraries_jll", "JLLWrappers", "Libdl", "Zlib_jll"]
 git-tree-sha1 = "10bf0ecdf70f643bfc1948a6af0a98be3950a3fc"
 uuid = "8fd58aa0-07eb-5a78-9b36-339c94fd15ea"
 version = "1.6.0+0"
@@ -1613,21 +1663,26 @@ version = "2.11.0"
 [[deps.LibCURL]]
 deps = ["LibCURL_jll", "MozillaCACerts_jll"]
 uuid = "b27032c2-a3e7-50c8-80cd-2d36dbcbfd21"
-version = "0.6.3"
+version = "0.6.4"
 
 [[deps.LibCURL_jll]]
 deps = ["Artifacts", "LibSSH2_jll", "Libdl", "MbedTLS_jll", "Zlib_jll", "nghttp2_jll"]
 uuid = "deac9b47-8bc7-5906-a0fe-35ac56dc84c0"
-version = "7.84.0+0"
+version = "8.4.0+0"
 
 [[deps.LibGit2]]
-deps = ["Base64", "NetworkOptions", "Printf", "SHA"]
+deps = ["Base64", "LibGit2_jll", "NetworkOptions", "Printf", "SHA"]
 uuid = "76f85450-5226-5b5a-8eaa-529ad045b433"
+
+[[deps.LibGit2_jll]]
+deps = ["Artifacts", "LibSSH2_jll", "Libdl", "MbedTLS_jll"]
+uuid = "e37daf67-58a4-590a-8e99-b0245dd2ffc5"
+version = "1.6.4+0"
 
 [[deps.LibSSH2_jll]]
 deps = ["Artifacts", "Libdl", "MbedTLS_jll"]
 uuid = "29816b5a-b9ab-546f-933c-edad1886dfa8"
-version = "1.10.2+0"
+version = "1.11.0+1"
 
 [[deps.Libdl]]
 uuid = "8f399da3-3557-5675-b5ff-fb832c97cbdb"
@@ -1832,7 +1887,7 @@ version = "1.1.7"
 [[deps.MbedTLS_jll]]
 deps = ["Artifacts", "Libdl"]
 uuid = "c8ffd9c3-330d-5841-b78e-0817d7145fa1"
-version = "2.28.2+0"
+version = "2.28.2+1"
 
 [[deps.Measures]]
 git-tree-sha1 = "c13304c81eec1ed3af7fc20e75fb6b26092a1102"
@@ -1850,7 +1905,7 @@ uuid = "a63ad114-7e13-5084-954f-fe012c677804"
 
 [[deps.MozillaCACerts_jll]]
 uuid = "14a3606d-f60d-562e-9121-12d972cd8159"
-version = "2022.10.11"
+version = "2023.1.10"
 
 [[deps.MuladdMacro]]
 git-tree-sha1 = "cac9cc5499c25554cba55cd3c30543cff5ca4fab"
@@ -1929,12 +1984,12 @@ version = "1.3.5+1"
 [[deps.OpenBLAS_jll]]
 deps = ["Artifacts", "CompilerSupportLibraries_jll", "Libdl"]
 uuid = "4536629a-c528-5b80-bd46-f80d51c5b363"
-version = "0.3.21+4"
+version = "0.3.23+4"
 
 [[deps.OpenLibm_jll]]
 deps = ["Artifacts", "Libdl"]
 uuid = "05823500-19ac-5b8b-9628-191a04bc5112"
-version = "0.8.1+0"
+version = "0.8.1+2"
 
 [[deps.OpenSSL]]
 deps = ["BitFlags", "Dates", "MozillaCACerts_jll", "OpenSSL_jll", "Sockets"]
@@ -1974,7 +2029,7 @@ version = "6.56.0"
 [[deps.PCRE2_jll]]
 deps = ["Artifacts", "Libdl"]
 uuid = "efcefdf7-47ab-520b-bdef-62a2eaa19f15"
-version = "10.42.0+0"
+version = "10.42.0+1"
 
 [[deps.PackageExtensionCompat]]
 git-tree-sha1 = "fb28e33b8a95c4cee25ce296c817d89cc2e53518"
@@ -2014,7 +2069,7 @@ version = "0.42.2+0"
 [[deps.Pkg]]
 deps = ["Artifacts", "Dates", "Downloads", "FileWatching", "LibGit2", "Libdl", "Logging", "Markdown", "Printf", "REPL", "Random", "SHA", "Serialization", "TOML", "Tar", "UUIDs", "p7zip_jll"]
 uuid = "44cfe95a-1eb2-52ea-b672-e2afdf69b78f"
-version = "1.9.2"
+version = "1.10.0"
 
 [[deps.PlotThemes]]
 deps = ["PlotUtils", "Statistics"]
@@ -2035,10 +2090,28 @@ uuid = "a03496cd-edff-5a9b-9e67-9cda94a718b5"
 version = "0.8.19"
 
 [[deps.PlotlyJS]]
-deps = ["Base64", "Blink", "DelimitedFiles", "JSExpr", "JSON", "Kaleido_jll", "Markdown", "Pkg", "PlotlyBase", "REPL", "Reexport", "Requires", "WebIO"]
-git-tree-sha1 = "3db9e7724e299684bf0ca8f245c0265c4bdd8dc6"
+deps = ["Base64", "Blink", "DelimitedFiles", "JSExpr", "JSON", "Kaleido_jll", "Markdown", "Pkg", "PlotlyBase", "PlotlyKaleido", "REPL", "Reexport", "Requires", "WebIO"]
+git-tree-sha1 = "e62d886d33b81c371c9d4e2f70663c0637f19459"
 uuid = "f0f68f2c-4968-5e81-91da-67840de0976a"
-version = "0.18.11"
+version = "0.18.13"
+
+    [deps.PlotlyJS.extensions]
+    CSVExt = "CSV"
+    DataFramesExt = ["DataFrames", "CSV"]
+    IJuliaExt = "IJulia"
+    JSON3Ext = "JSON3"
+
+    [deps.PlotlyJS.weakdeps]
+    CSV = "336ed68f-0bac-5ca0-87d4-7b16caf5d00b"
+    DataFrames = "a93c6f00-e57d-5684-b7b6-d8193f3e46c0"
+    IJulia = "7073ff75-c697-5162-941a-fcdaad2a7d2a"
+    JSON3 = "0f8b85d8-7281-11e9-16c2-39a750bddbf1"
+
+[[deps.PlotlyKaleido]]
+deps = ["Base64", "JSON", "Kaleido_jll"]
+git-tree-sha1 = "2650cd8fb83f73394996d507b3411a7316f6f184"
+uuid = "f2990250-8cf9-495f-b13a-cce12b45703c"
+version = "2.2.4"
 
 [[deps.Plots]]
 deps = ["Base64", "Contour", "Dates", "Downloads", "FFMPEG", "FixedPointNumbers", "GR", "JLFzf", "JSON", "LaTeXStrings", "Latexify", "LinearAlgebra", "Measures", "NaNMath", "Pkg", "PlotThemes", "PlotUtils", "PrecompileTools", "Preferences", "Printf", "REPL", "Random", "RecipesBase", "RecipesPipeline", "Reexport", "RelocatableFolders", "Requires", "Scratch", "Showoff", "SparseArrays", "Statistics", "StatsBase", "UUIDs", "UnicodeFun", "UnitfulLatexify", "Unzip"]
@@ -2143,7 +2216,7 @@ deps = ["InteractiveUtils", "Markdown", "Sockets", "Unicode"]
 uuid = "3fa0cd96-eef1-5676-8a61-b3b8758bbffb"
 
 [[deps.Random]]
-deps = ["SHA", "Serialization"]
+deps = ["SHA"]
 uuid = "9a3f8284-a2c9-5f02-9a11-845980a1fd5c"
 
 [[deps.ReachabilityAnalysis]]
@@ -2337,6 +2410,7 @@ version = "1.1.1"
 [[deps.SparseArrays]]
 deps = ["Libdl", "LinearAlgebra", "Random", "Serialization", "SuiteSparse_jll"]
 uuid = "2f01184e-e22b-5df5-ae63-d93ebab69eaf"
+version = "1.10.0"
 
 [[deps.SparseDiffTools]]
 deps = ["ADTypes", "Adapt", "ArrayInterface", "Compat", "DataStructures", "FiniteDiff", "ForwardDiff", "Graphs", "LinearAlgebra", "PackageExtensionCompat", "Reexport", "SciMLOperators", "Setfield", "SparseArrays", "StaticArrayInterface", "StaticArrays", "Tricks", "UnPack", "VertexSafeGraphs"]
@@ -2405,7 +2479,7 @@ version = "1.4.2"
 [[deps.Statistics]]
 deps = ["LinearAlgebra", "SparseArrays"]
 uuid = "10745b16-79ce-11e8-11f9-7d13ad32a3b2"
-version = "1.9.0"
+version = "1.10.0"
 
 [[deps.StatsAPI]]
 deps = ["LinearAlgebra"]
@@ -2436,9 +2510,9 @@ deps = ["Libdl", "LinearAlgebra", "Serialization", "SparseArrays"]
 uuid = "4607b0f0-06f3-5cda-b6b1-a6196a1729e9"
 
 [[deps.SuiteSparse_jll]]
-deps = ["Artifacts", "Libdl", "Pkg", "libblastrampoline_jll"]
+deps = ["Artifacts", "Libdl", "libblastrampoline_jll"]
 uuid = "bea87d4a-7f5b-5778-9afe-8cc45184846c"
-version = "5.10.1+6"
+version = "7.2.1+1"
 
 [[deps.SymbolicIndexingInterface]]
 deps = ["DocStringExtensions"]
@@ -2786,7 +2860,7 @@ version = "1.5.0+0"
 [[deps.Zlib_jll]]
 deps = ["Libdl"]
 uuid = "83775a58-1f1d-513f-b197-d71354ab007a"
-version = "1.2.13+0"
+version = "1.2.13+1"
 
 [[deps.Zstd_jll]]
 deps = ["Artifacts", "JLLWrappers", "Libdl"]
@@ -2833,7 +2907,7 @@ version = "0.15.1+0"
 [[deps.libblastrampoline_jll]]
 deps = ["Artifacts", "Libdl"]
 uuid = "8e850b90-86db-534c-a0d3-1478176c7d93"
-version = "5.8.0+0"
+version = "5.8.0+1"
 
 [[deps.libevdev_jll]]
 deps = ["Artifacts", "JLLWrappers", "Libdl", "Pkg"]
@@ -2874,12 +2948,12 @@ version = "1.1.6+0"
 [[deps.nghttp2_jll]]
 deps = ["Artifacts", "Libdl"]
 uuid = "8e850ede-7688-5339-a07c-302acd2aaf8d"
-version = "1.48.0+0"
+version = "1.52.0+1"
 
 [[deps.p7zip_jll]]
 deps = ["Artifacts", "Libdl"]
 uuid = "3f19e933-33d8-53b3-aaab-bd5110c3b7a0"
-version = "17.4.0+0"
+version = "17.4.0+2"
 
 [[deps.x264_jll]]
 deps = ["Artifacts", "JLLWrappers", "Libdl", "Pkg"]
@@ -2919,10 +2993,10 @@ version = "1.4.1+1"
 # ╠═96f1cf81-d479-45e9-982b-cad1530e9048
 # ╠═1e8112d9-75b1-419d-872a-d80cba669f2a
 # ╟─dc34a7f4-2810-4a6f-8043-231e5741500d
-# ╠═b1597652-8662-411a-8974-979358fa9f6d
+# ╠═f2722a1b-9c28-4743-96b8-e603ede1c8bf
+# ╠═5b707ef0-30ac-4bef-8711-e536b93343e1
 # ╟─c2e067fc-05e4-4fdc-9655-dd4259b11c19
-# ╠═b4e50b7b-e43c-4653-be47-36512f06d1df
-# ╠═01356e5b-c44c-4098-aa2a-b009b49b9679
+# ╠═12f96485-a85a-479d-aeb3-7a9a196b3e62
 # ╠═c93415c5-f0a5-4dd1-9267-7e6443f6a08f
 # ╟─ffba1085-cce5-4b35-9271-97683e6da157
 # ╠═c634038a-5ec2-4c6a-97af-d340617eef89
@@ -2946,6 +3020,7 @@ version = "1.4.1+1"
 # ╠═05faadb9-28a7-48aa-b9b2-90d1010b6092
 # ╠═c73b8dcf-73bd-43d2-9d5f-5ea680c1e169
 # ╟─e95f6363-6d2f-4a88-aa30-139f7f594637
+# ╟─0bfc7a46-88ee-4314-9f47-82db0449aba4
 # ╠═fa71efe9-ccfa-4075-85b5-c7e5297f99a0
 # ╠═843cb555-5ac2-4956-9245-65b6cdcdb847
 # ╟─a95d593c-3da8-4f09-9b99-a3d6020772dd
