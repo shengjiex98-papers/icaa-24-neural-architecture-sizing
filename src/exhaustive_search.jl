@@ -47,23 +47,36 @@ const ctrl_delay = 0.1
 const Φ = ℯ^(A * ctrl_delay)
 const x0 = Zonotope(fill(10., 5), collect(1.0 * I(5)))
 
-const dist_yolo_tradeoffs = (
-    MNv3s = (err=47.66, gflop=9.869),
-    SNV2 =  (err=40.19, gflop=37.916),
-    MNv3l = (err=32.91, gflop=43.731),
-    # MN =    (err=41.05, gflop=43.302),
-    # MNv2 =  (err=44.31, gflop=43.786),
-    # B0 =    (err=35.31, gflop=54.051),
-    # B1 =    (err=38.90, gflop=56.830),
-    B2 =    (err=30.61, gflop=69.371),
-    B3 =    (err=27.23, gflop=84.574),
-    X =     (err=26.92, gflop=104.00),
-    # B4 =    (err=28.13, gflop=118.589),
-    # B5 =    (err=36.25, gflop=156.735),
-    B6 =    (err=21.08, gflop=205.171),
-    # B7 =    (err=21.11, gflop=269.646),
+const efficient_net_configurations = (
+    B0 = (top_1_accuracy = 77.1, top_5_accuracy = 93.3, gflop = 0.39),
+    B1 = (top_1_accuracy = 79.1, top_5_accuracy = 94.4, gflop = 0.70),
+    B2 = (top_1_accuracy = 80.1, top_5_accuracy = 94.9, gflop = 1.0),
+    B3 = (top_1_accuracy = 81.6, top_5_accuracy = 95.7, gflop = 1.8),
+    B4 = (top_1_accuracy = 82.9, top_5_accuracy = 96.4, gflop = 4.2),
+    B5 = (top_1_accuracy = 83.6, top_5_accuracy = 96.7, gflop = 9.9),
+    B6 = (top_1_accuracy = 84.0, top_5_accuracy = 96.8, gflop = 19),
+    B7 = (top_1_accuracy = 84.3, top_5_accuracy = 97.0, gflop = 37),
 )
-const tradeoff_map = vcat(([nn.err nn.gflop] for nn in dist_yolo_tradeoffs)...)
+const efficient_net_tradeoff_map_1 = vcat(([100/nn.top_1_accuracy-1 nn.gflop] for nn in efficient_net_configurations)...)
+const efficient_net_tradeoff_map_5 = vcat(([100/nn.top_5_accuracy-1 nn.gflop] for nn in efficient_net_configurations)...)
+
+const dist_yolo_backbones = (
+    MNv3s = (error=47.66, gflop=9.869),
+    SNV2 =  (error=40.19, gflop=37.916),
+    MNv3l = (error=32.91, gflop=43.731),
+    # MN =    (error=41.05, gflop=43.302),
+    # MNv2 =  (error=44.31, gflop=43.786),
+    # B0 =    (error=35.31, gflop=54.051),
+    # B1 =    (error=38.90, gflop=56.830),
+    B2 =    (error=30.61, gflop=69.371),
+    B3 =    (error=27.23, gflop=84.574),
+    X =     (error=26.92, gflop=104.00),
+    # B4 =    (error=28.13, gflop=118.589),
+    # B5 =    (error=36.25, gflop=156.735),
+    B6 =    (error=21.08, gflop=205.171),
+    # B7 =    (error=21.11, gflop=269.646),
+)
+const dist_yolo_tradeoff_map = vcat(([nn.error nn.gflop] for nn in dist_yolo_backbones)...)
 
 function exhaustive_search(tradeoff_map, Φ, x0, all=true)
     upto = size(tradeoff_map, 1)
@@ -78,6 +91,34 @@ function exhaustive_search(tradeoff_map, Φ, x0, all=true)
     points[:,2:end]
 end
 
-@info "Start searching"
-@time res = exhaustive_search(tradeoff_map, Φ, x0)
-serialize("../data/dist_yolo_points_7nn.jls", res)
+choice = ARGS[1]
+
+if choice == "efficient_net_1"
+    @info "Start searching EfficientNet 1-5"
+    @time res = exhaustive_search(efficient_net_tradeoff_map_1[1:5, :], Φ, x0)
+    flush(stderr)
+    serialize("../data/efficient_net_points_top_1_5.jls", res)
+
+    @info "Start searching EfficientNet 1-8"
+    @time res = exhaustive_search(efficient_net_tradeoff_map_1, Φ, x0)
+    flush(stderr)
+    serialize("../data/efficient_net_points_top_1_8.jls", res)
+elseif choice == "efficient_net_5"
+    @info "Start searching EfficientNet 1-5"
+    @time res = exhaustive_search(efficient_net_tradeoff_map_5[1:5, :], Φ, x0)
+    flush(stderr)
+    serialize("../data/efficient_net_points_top_5_5.jls", res)
+
+    @info "Start searching EfficientNet 1-8"
+    @time res = exhaustive_search(efficient_net_tradeoff_map_5, Φ, x0)
+    flush(stderr)
+    serialize("../data/efficient_net_points_top_5_8.jls", res)
+elseif choice == "dist_yolo"
+    @info "Start searching Dist-YOLO"
+    @time res = exhaustive_search(dist_yolo_tradeoff_map, Φ, x0)
+    flush(stderr)
+    serialize("../data/dist_yolo_points_7.jls", res)
+else
+    @error "Invalid choice"
+end
+
