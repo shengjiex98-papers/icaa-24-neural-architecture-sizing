@@ -8,12 +8,14 @@
 #SBATCH --mem=8G
 #SBATCH --time=12:00:00
 
+#SBATCH --error=$SLURM_JOB_ID.err
+
 echo "SLURM_JOB_ID: $SLURM_JOB_ID."
 echo "Executing on the machine:" $(hostname)
 
-MAP=efficient_net_1
+# MAP=efficient_net_1
 # MAP=efficient_net_5
-# MAP=dist_yolo
+MAP=dist_yolo
 
 module purge
 module use $HOME/modulefiles
