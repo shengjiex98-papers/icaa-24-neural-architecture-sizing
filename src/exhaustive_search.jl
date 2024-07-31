@@ -61,20 +61,12 @@ const efficient_net_tradeoff_map_1 = vcat(([100/nn.top_1_accuracy-1 nn.gflop] fo
 const efficient_net_tradeoff_map_5 = vcat(([100/nn.top_5_accuracy-1 nn.gflop] for nn in efficient_net_configurations)...)
 
 const dist_yolo_backbones = (
-    MNv3s = (error=47.66, gflop=9.869),
-    SNV2 =  (error=40.19, gflop=37.916),
-    MNv3l = (error=32.91, gflop=43.731),
-    # MN =    (error=41.05, gflop=43.302),
-    # MNv2 =  (error=44.31, gflop=43.786),
-    # B0 =    (error=35.31, gflop=54.051),
-    # B1 =    (error=38.90, gflop=56.830),
-    B2 =    (error=30.61, gflop=69.371),
-    B3 =    (error=27.23, gflop=84.574),
-    X =     (error=26.92, gflop=104.00),
-    # B4 =    (error=28.13, gflop=118.589),
-    # B5 =    (error=36.25, gflop=156.735),
-    B6 =    (error=21.08, gflop=205.171),
-    # B7 =    (error=21.11, gflop=269.646),
+    MNv3s = (error=42.53, gflop=9.833),
+    MNv2 = (error=34.23, gflop=43.714),
+    B2 = (error=30.61, gflop=69.371),
+    B3 = (error=27.23, gflop=84.574),
+    X = (error=24.34, gflop=103.935),
+    B6 = (error=21.08, gflop=205.171)
 )
 const dist_yolo_tradeoff_map = vcat(([nn.error nn.gflop] for nn in dist_yolo_backbones)...)
 
@@ -117,7 +109,7 @@ elseif choice == "dist_yolo"
     @info "Start searching Dist-YOLO"
     @time res = exhaustive_search(dist_yolo_tradeoff_map, Φ, x0)
     flush(stderr)
-    serialize("../data/dist_yolo_points_7.jls", res)
+    serialize("../data/dist_yolo_points_6.jls", res)
 else
     @error "Invalid choice"
 end
