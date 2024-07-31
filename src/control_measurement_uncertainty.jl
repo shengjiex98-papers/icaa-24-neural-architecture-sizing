@@ -154,16 +154,16 @@ We map the accuracy in percent to a noise bound in the range ``[0, ∞)`` by tak
 
 # ╔═╡ 6ab82ec9-c54a-4fcb-80b5-f0770ff4cff3
 const dist_yolo_tradeoffs = (
-    MobileNetv3_small = (err=47.66, gflop=9.869),
-    # MobileNetv2 =       (err=44.31, gflop=43.786),
-    ShuffleNetv2 =      (err=44.31, gflop=37.916),
-    MobileNet =         (err=41.05, gflop=43.302),
-    MobileNetv3_large = (err=32.90, gflop=43.731),
-    Xception =          (err=26.91, gflop=104.002),
+    MNv3s = (error=42.53, gflop=9.833),
+    MNv2 = (error=34.23, gflop=43.714),
+    B2 = (error=30.61, gflop=69.371),
+    B3 = (error=27.23, gflop=84.574),
+    X = (error=24.34, gflop=103.935),
+    B6 = (error=21.08, gflop=205.171)
 )
 
 # ╔═╡ 97147c28-73ab-4ad9-b07c-8886085cdbf3
-const tradeoff_map = vcat(([nn.err nn.gflop] for nn in dist_yolo_tradeoffs)...)
+const tradeoff_map = vcat(([nn.error nn.gflop] for nn in dist_yolo_tradeoffs)...)
 
 # ╔═╡ 12f96485-a85a-479d-aeb3-7a9a196b3e62
 n = size(tradeoff_map, 1)
@@ -199,8 +199,8 @@ We can then view the points as a table, or as a scatter plot.
 
 # ╔═╡ 9e143da7-bd8e-4123-8ac7-bcb4a93fe797
 begin
-	allpoints = deserialize("../data/dist_yolo_points.jls")
-	allpoints = vcat(allpoints, [true fill(true, 1, size(allpoints, 2)-1)])
+	allpoints = deserialize("../data/dist_yolo_points_6.jls")
+	allpoints = vcat(allpoints, fill(true, 1, size(allpoints, 2)))
 	points = allpoints[1:4, map(x -> reduce(&, x .<= n), allpoints[1,:])]
 	# @info points
 	# safepoints = points[1:3, BitVector(points[4,:])]
@@ -210,7 +210,7 @@ end
 
 # ╔═╡ 106b5ce1-053e-47c4-83f1-130274d727ed
 begin
-	nn_choices = 5
+	nn_choices = n
 	ndims = 5
 	diameters = zeros(fill(nn_choices, ndims)...)
 	costs = zeros(fill(nn_choices, ndims)...)
